@@ -297,7 +297,15 @@ void VescToSTM_handle_timeout(){
 	}
 	if(appconf.timeout_msec){
 		if((xTaskGetTickCount() - last_reset) > (appconf.timeout_msec*2)){
+#if defined(G30P) && SESC_NO_REGEN
+			/* Lost dashboard link must coast, never request regenerative braking. */
+			VescToSTM_set_current_rel(0.0f);
+			if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+				VescToSTM_pwm_stop();
+			}
+#else
 			VescToSTM_set_brake(appconf.timeout_brake_current*1000);
+#endif
 			app_adc_stop_output();
 			last_reset = xTaskGetTickCount();
 			timeout_triggerd = true;
@@ -311,6 +319,15 @@ void VescToSTM_enable_timeout(bool enbale){
 
 void VescToSTM_pwm_stop(void){
 	if(PWM_Handle_M1._Super.PWM_off == false){
+		/*
+		 * Preserve an estimate of back-EMF before entering true freewheel.
+		 * pwm_start() uses it to preload the current controller when torque is
+		 * requested again while the wheel is already spinning.
+		 */
+		int32_t erpm = VescToSTM_get_erpm_fast()*2;
+		float rad_s = erpm * ((2.0f * M_PI) / 60.0f);
+		motor_voltage = rad_s * mc_conf.foc_motor_flux_linkage;
+
 		PWMC_SwitchOffPWM(&PWM_Handle_M1._Super);
 		PIDIdHandle_M1.wIntegralTerm = 0;
 		PIDIqHandle_M1.wIntegralTerm = 0;
