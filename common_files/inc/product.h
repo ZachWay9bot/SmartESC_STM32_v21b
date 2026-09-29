@@ -78,12 +78,13 @@
  * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
  * update-control data used by the IAP/SHU rollback path.
  *
- * Linker ends at page 103. Pages 104/105 are therefore dedicated to
- * SmartESC app/motor configuration. Pages 112..127 stay untouched so the
- * stock calibration/update-control region survives.
+ * The stock application region ends at 0x0800DFFF (page 55). Pages 56/57
+ * (0x0800E000..0x0800E7FF) are used for SmartESC app/motor configuration.
+ * The documented stock update staging starts at 0x0800E800, so the normal
+ * IAP staging/calibration/update-control ranges remain available.
  */
-#define APP_PAGE				104
-#define CONF_PAGE				105
+#define APP_PAGE				56
+#define CONF_PAGE				57
 #define PAGE_SIZE				0x400
 
 #endif
