@@ -11,7 +11,8 @@ the stock Ninebot bootloader. This branch instead uses:
 ```
 0x08000000..0x08000FFF  stock Ninebot IAP bootloader (must already be present)
 0x08001000..0x08019FFF  SmartESC application, max 100 KiB
-0x0801A000..0x0801BFFF  left unused by this build
+0x0801A000..0x0801A7FF  SmartESC app/motor configuration (pages 104/105)
+0x0801A800..0x0801BFFF  left unused by this build
 0x0801C000..0x0801F7FF  stock configuration/calibration region, preserved
 0x0801F800..0x0801FFFF  stock update-control region, preserved
 ```
