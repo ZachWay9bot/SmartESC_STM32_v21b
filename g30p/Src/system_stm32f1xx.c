@@ -103,12 +103,11 @@
 #if defined(VECT_TAB_SRAM)
 #define VECT_TAB_BASE_ADDRESS   SRAM_BASE       /*!< Vector Table base address field.
                                                      This value must be a multiple of 0x200. */
-#define VECT_TAB_OFFSET         0x00001000U     /*!< G30 stock IAP bootloader occupies first 4 KiB. */
+#define VECT_TAB_OFFSET         0x00000000U     /*!< Vector Table base offset field. */
 #else
 #define VECT_TAB_BASE_ADDRESS   FLASH_BASE      /*!< Vector Table base address field.
                                                      This value must be a multiple of 0x200. */
-#define VECT_TAB_OFFSET         0x00000000U     /*!< Vector Table base offset field.
-                                                     This value must be a multiple of 0x200. */
+#define VECT_TAB_OFFSET         0x00001000U     /*!< G30 stock IAP bootloader occupies first 4 KiB. */
 #endif /* VECT_TAB_SRAM */
 #endif /* USER_VECT_TAB_ADDRESS */
 
