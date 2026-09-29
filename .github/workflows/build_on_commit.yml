@@ -6,7 +6,7 @@ name: Build on commit
 on:
   # Triggers the workflow on push or pull request events but only for the vesc_comp branch
   push:
-    branches: [ vesc_comp ]
+    branches: [ vesc_comp, feature/shu-coast-delta ]
   pull_request:
     branches: [ vesc_comp ]
     
@@ -49,9 +49,17 @@ jobs:
         entrypoint: /opt/stm32cubeide/stm32cubeide
         args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
 
-    - name: 'Upload Artifact G30P - with build number'
+    - name: 'Package G30P for SHU'
+      run: |
+        python3 tools/make_shu_zip.py \
+          "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
+          "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/SmartESC_G30_SHU_Coast_Delta.zip"
+
+    - name: 'Upload Artifact G30P + SHU package'
       uses: actions/upload-artifact@v4
       with:
-        path: ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
-        name: g30p-${{ github.run_number }}
+        path: |
+          ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
+          ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/SmartESC_G30_SHU_Coast_Delta.zip
+        name: g30p-shu-${{ github.run_number }}
         retention-days: 5
