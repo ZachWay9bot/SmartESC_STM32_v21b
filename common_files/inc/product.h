@@ -55,6 +55,8 @@
 #define SESC_NO_REGEN                                                       1
 #define DELTA_RELAY_ENABLE                                                  1
 #define SESC_SHU_COMPAT                                                     1
+#define SESC_SHU_LITE                                                       1
+#define TRUE_COAST_IQ_A                                                     (1.5f)
 #define DELTA_ENTER_SPEED_KMH                                               (32.0f)
 #define DELTA_EXIT_SPEED_KMH                                                (26.0f)
 #define DELTA_SWITCH_MAX_IQ_A                                               (2.0f)
@@ -198,13 +200,27 @@
 
 #define KMH_NO_LIMIT														 1337
 #define PRODUCT_FIRMWARE_VERSION                                      		 0x0001
+#if defined(G30P) && SESC_SHU_LITE
+/*
+ * The stock G30 IAP application window is only 52 KiB. The full VESC Tool
+ * command/serialization stack makes SmartESC substantially larger than that,
+ * so the reversible SHU image is deliberately a compact ride build.
+ * The normal branch keeps VESC Tool support.
+ */
+#define VESC_TOOL_ENABLE                                                     0
+#define ERROR_PRINTING                                                       0
+#define BATTERY_SUPPORT_LIION                                                1
+#define BATTERY_SUPPORT_LIFEPO                                               0
+#define BATTERY_SUPPORT_LEAD                                                 0
+#else
 #define VESC_TOOL_ENABLE													 1
-#define AUTO_RESET_FAULT													 1
 #define ERROR_PRINTING														 1
-#define MUSIC_ENABLE														 0
 #define BATTERY_SUPPORT_LIION												 1
 #define BATTERY_SUPPORT_LIFEPO												 1
 #define BATTERY_SUPPORT_LEAD												 1
+#endif
+#define AUTO_RESET_FAULT													 1
+#define MUSIC_ENABLE														 0
 #define ABS_OVR_CURRENT_TRIP_MS												 2.0
 #define MIN_DUTY_FOR_PWM_FREEWHEEL											 20
 #define CURRENT_DISPLAY_OFFSET											     80   //in cnts
