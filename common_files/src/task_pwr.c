@@ -147,7 +147,18 @@ void task_PWR(void *argument) {
 
 			  } break ;
 			  case VERY_LONG_PRESS :   {
-
+#if defined(G30P) && SESC_SHU_COMPAT
+				  /*
+				   * Manual recovery path: at standstill, reboot while the dashboard
+				   * power button is still physically held. This gives the preserved
+				   * stock IAP bootloader the same held-button condition during reset.
+				   */
+				  if(fabsf(VescToSTM_get_speed()) < 0.5f) {
+					  HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+					  VescToSTM_pwm_stop();
+					  NVIC_SystemReset();
+				  }
+#endif
 			  } break ;
 			  case DOUBLE_PRESS : {
 				  uint32_t kmh=0;
