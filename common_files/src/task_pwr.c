@@ -28,6 +28,7 @@
 #include "task.h"
 #include "task_cli.h"
 #include <string.h>
+#include <math.h>
 #include "VescCommand.h"
 #include "music.h"
 #include "ninebot.h"
