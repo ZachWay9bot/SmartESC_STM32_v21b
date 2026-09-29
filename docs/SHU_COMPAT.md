@@ -10,16 +10,23 @@ the stock Ninebot bootloader. This branch instead uses:
 
 ```
 0x08000000..0x08000FFF  stock Ninebot IAP bootloader (must already be present)
-0x08001000..0x08019FFF  SmartESC application, max 100 KiB
-0x0801A000..0x0801A7FF  SmartESC app/motor configuration (pages 104/105)
-0x0801A800..0x0801BFFF  left unused by this build
+0x08001000..0x0800DFFF  SmartESC application, max 52 KiB
+0x0800E000..0x0800E7FF  SmartESC app/motor configuration (pages 56/57)
+0x0800E800..0x0801BFFF  stock update staging area
 0x0801C000..0x0801F7FF  stock configuration/calibration region, preserved
 0x0801F800..0x0801FFFF  stock update-control region, preserved
 ```
 
-SmartESC's emulated configuration pages are moved to flash pages 104/105
-(`0x0801A000` and `0x0801A400`). The stock last two pages are deliberately
+SmartESC's emulated configuration pages are moved to flash pages 56/57
+(`0x0800E000` and `0x0800E400`). The documented stock staging area begins
+at `0x0800E800`, and the stock calibration/update-control region is deliberately
 not touched.
+
+The 52 KiB application ceiling is also deliberate. The stock G30 IAP start
+packet carries firmware size as a 16-bit value, and the documented ESC app
+region ends at `0x0800DFFF`. If SmartESC does not link inside this region,
+the SHU build must be slimmed down rather than silently consuming the stock
+staging area.
 
 ## SHU package
 
