@@ -54,6 +54,7 @@
  */
 #define SESC_NO_REGEN                                                       1
 #define DELTA_RELAY_ENABLE                                                  1
+#define SESC_SHU_COMPAT                                                     1
 #define DELTA_ENTER_SPEED_KMH                                               (32.0f)
 #define DELTA_EXIT_SPEED_KMH                                                (26.0f)
 #define DELTA_SWITCH_MAX_IQ_A                                               (2.0f)
@@ -73,8 +74,16 @@
 #define MOT_TMR_MHZ 64
 #define HEAP_SIZE_KB 14
 #define CPU_MHZ  (64*1000000)
-#define APP_PAGE				126
-#define CONF_PAGE				127
+/*
+ * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
+ * update-control data used by the IAP/SHU rollback path.
+ *
+ * Linker ends at page 103. Pages 104/105 are therefore dedicated to
+ * SmartESC app/motor configuration. Pages 112..127 stay untouched so the
+ * stock calibration/update-control region survives.
+ */
+#define APP_PAGE				104
+#define CONF_PAGE				105
 #define PAGE_SIZE				0x400
 
 #endif
