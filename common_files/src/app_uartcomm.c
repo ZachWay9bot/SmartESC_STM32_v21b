@@ -47,6 +47,142 @@ uint32_t app_updaterate();
 TaskHandle_t task_app_handle;
 TimerHandle_t xTimer;
 
+#if defined(G30P) && SESC_SHU_COMPAT
+/*
+ * Stock G30 / SHU protocol sniffer.
+ *
+ * SmartESC's normal dashboard protocol is left untouched. In parallel we watch
+ * for checksum-valid stock Ninebot frames:
+ *
+ *   5A A5 LEN SRC DST CMD ARG payload[LEN] CK_LO CK_HI
+ *
+ * If SHU starts an ESC firmware-update transaction while the scooter is
+ * stationary, SmartESC releases the motor and reboots so the preserved stock
+ * 4 KiB IAP bootloader can take over. The phone-side flasher will retry the
+ * update command after the reset.
+ */
+typedef struct {
+	uint8_t state;
+	uint8_t index;
+	uint8_t expected;
+	uint8_t body[80];
+} shu_rx_t;
+
+static shu_rx_t shu_rx;
+
+static void shu_rx_reset(void) {
+	memset(&shu_rx, 0, sizeof(shu_rx));
+}
+
+static bool shu_update_opcode(uint8_t cmd, uint8_t arg) {
+	/*
+	 * Verified stock G30 dispatch contains 0x50/0x57..0x59/0x5C in the
+	 * IAP/update/calibration family. 0x50 and 0x57 are used as conservative
+	 * update-entry candidates. The WRITE-to-ARG-0x07 case is retained for
+	 * older Ninebot flasher implementations.
+	 */
+	if(cmd == 0x50 || cmd == 0x57) {
+		return true;
+	}
+	if((cmd == 0x02 || cmd == 0x03) && arg == 0x07) {
+		return true;
+	}
+	return false;
+}
+
+static bool shu_feed_stock_frame(uint8_t b) {
+	switch(shu_rx.state) {
+	case 0:
+		if(b == 0x5A) shu_rx.state = 1;
+		break;
+
+	case 1:
+		if(b == 0xA5) {
+			shu_rx.state = 2;
+			shu_rx.index = 0;
+			shu_rx.expected = 0;
+		} else if(b != 0x5A) {
+			shu_rx.state = 0;
+		}
+		break;
+
+	case 2:
+		if(shu_rx.index >= sizeof(shu_rx.body)) {
+			shu_rx_reset();
+			break;
+		}
+
+		shu_rx.body[shu_rx.index++] = b;
+
+		if(shu_rx.index == 1) {
+			/* body = LEN SRC DST CMD ARG payload CKlo CKhi */
+			uint16_t expected = (uint16_t)shu_rx.body[0] + 7u;
+			if(expected < 7u || expected > sizeof(shu_rx.body)) {
+				shu_rx_reset();
+				break;
+			}
+			shu_rx.expected = (uint8_t)expected;
+		}
+
+		if(shu_rx.expected && shu_rx.index == shu_rx.expected) {
+			uint16_t sum = 0;
+			for(uint8_t i = 0; i < (uint8_t)(shu_rx.expected - 2u); i++) {
+				sum = (uint16_t)(sum + shu_rx.body[i]);
+			}
+			const uint16_t calc = (uint16_t)(~sum);
+			const uint16_t recv =
+					(uint16_t)shu_rx.body[shu_rx.expected - 2u] |
+					((uint16_t)shu_rx.body[shu_rx.expected - 1u] << 8);
+
+			bool request = false;
+			if(calc == recv) {
+				const uint8_t src = shu_rx.body[1];
+				const uint8_t dst = shu_rx.body[2];
+				const uint8_t cmd = shu_rx.body[3];
+				const uint8_t arg = shu_rx.body[4];
+
+				if(dst == 0x20 &&
+				   (src == 0x21 || src == 0x3E || src == 0x3F) &&
+				   shu_update_opcode(cmd, arg)) {
+					request = true;
+				}
+			}
+
+			shu_rx_reset();
+			return request;
+		}
+		break;
+
+	default:
+		shu_rx_reset();
+		break;
+	}
+
+	return false;
+}
+
+static void shu_handoff_to_stock_iap(void) {
+	/* Never enter a flasher while the wheel is moving. */
+	if(fabsf(VescToSTM_get_speed()) > 0.5f) {
+		return;
+	}
+
+	VescToSTM_set_current_rel(0.0f);
+	vTaskDelay(MS_TO_TICKS(20));
+
+	if(fabsf(VescToSTM_get_iq()) > DELTA_SWITCH_MAX_IQ_A) {
+		return;
+	}
+
+	/* Fail-safe STAR before handing control to the stock bootloader. */
+	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+	VescToSTM_pwm_stop();
+	vTaskDelay(MS_TO_TICKS(10));
+
+	NVIC_SystemReset();
+}
+#endif
+
 void my_uart_send_data(unsigned char *buf, unsigned int len, port_str * port){
 	if(port->half_duplex){
 		port->uart->Instance->CR1 &= ~USART_CR1_RE;
@@ -349,6 +485,11 @@ void task_app(void * argument)
 	for(;;)
 	{
 		while(rd_ptr != uart_get_write_pos(port)) {
+#if defined(G30P) && SESC_SHU_COMPAT
+			if(shu_feed_stock_frame(usart_rx_dma_buffer[rd_ptr])) {
+				shu_handoff_to_stock_iap();
+			}
+#endif
 			if(ninebot_parse(usart_rx_dma_buffer[rd_ptr] ,&frame)	==0){
 				//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
 				switch(frame.cmd){
