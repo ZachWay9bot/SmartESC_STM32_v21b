@@ -346,9 +346,9 @@ void vTimerCallback( TimerHandle_t xTimer ){
 
 #ifdef G30P
 	/*
-	 * STAR/DELTA transition owns the motor for a short window:
-	 * coast to near-zero Iq, switch the relays, wait for contact settling,
-	 * then let the normal positive-current ramp take over again.
+	 * STAR/DELTA transition owns the motor for a short window. task_LED.c
+	 * waits for low Iq, disables PWM, changes the relay topology and keeps
+	 * torque inhibited until the contacts have settled.
 	 */
 	if(task_delta_coast_required()) {
 		pwr_ramp = 0.0f;
@@ -358,8 +358,31 @@ void vTimerCallback( TimerHandle_t xTimer ){
 #endif
 
 	if(app_is_output_disabled()){
+#if defined(G30P) && SESC_NO_REGEN
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+#endif
 		return;
 	}
+
+#if defined(G30P) && SESC_NO_REGEN
+	/*
+	 * True coast: once commanded torque and measured Iq are near zero, turn
+	 * the inverter PWM fully off. On throttle re-application pwm_start()
+	 * re-synchronizes to the Hall angle and preloads the current controller.
+	 */
+	if(pwr <= 0.0001f) {
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+		return;
+	}
+
+	VescToSTM_pwm_start();
+#endif
 
 	// Use the filtered and mapped voltage for control according to the configuration.
 	switch (config.ctrl_type) {
