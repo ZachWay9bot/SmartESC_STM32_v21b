@@ -44,6 +44,7 @@ extern stm_state VescToSTM_mode;
 typedef enum {
 	DELTA_STATE_IDLE = 0,
 	DELTA_STATE_WAIT_ZERO,
+	DELTA_STATE_PWM_OFF_WAIT,
 	DELTA_STATE_SETTLE
 } delta_state_t;
 
@@ -51,7 +52,7 @@ static volatile bool delta_active = false;
 static volatile bool delta_coast_required = false;
 static bool delta_target = false;
 static delta_state_t delta_state = DELTA_STATE_IDLE;
-static TickType_t delta_settle_until = 0;
+static TickType_t delta_deadline = 0;
 
 /*
  * G30 rear-light output is open-drain.
@@ -96,15 +97,24 @@ static void prv_delta_update(void) {
 		delta_coast_required = true;
 
 		if(fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
+			/* Make the inverter high-Z before changing the winding topology. */
+			VescToSTM_pwm_stop();
+			delta_deadline = xTaskGetTickCount() + MS_TO_TICKS(20u);
+			delta_state = DELTA_STATE_PWM_OFF_WAIT;
+		}
+	} else if(delta_state == DELTA_STATE_PWM_OFF_WAIT) {
+		delta_coast_required = true;
+
+		if((int32_t)(xTaskGetTickCount() - delta_deadline) >= 0) {
 			delta_write_output(delta_target);
 			delta_active = delta_target;
-			delta_settle_until = xTaskGetTickCount() + MS_TO_TICKS(DELTA_RELAY_SETTLE_MS);
+			delta_deadline = xTaskGetTickCount() + MS_TO_TICKS(DELTA_RELAY_SETTLE_MS);
 			delta_state = DELTA_STATE_SETTLE;
 		}
 	} else if(delta_state == DELTA_STATE_SETTLE) {
 		delta_coast_required = true;
 
-		if((int32_t)(xTaskGetTickCount() - delta_settle_until) >= 0) {
+		if((int32_t)(xTaskGetTickCount() - delta_deadline) >= 0) {
 			delta_coast_required = false;
 			delta_state = DELTA_STATE_IDLE;
 		}
@@ -183,6 +193,10 @@ void task_LED(void * argument)
 	/* Infinite loop */
 	for(;;)
 	{
+#if !VESC_TOOL_ENABLE
+		/* In the compact SHU build there is no CLI task to service this. */
+		VescToSTM_handle_timeout();
+#endif
 		if(pMCI[M1]->pSTM->hFaultOccurred){
 			if(last_fault != pMCI[M1]->pSTM->hFaultOccurred){
 				last_fault_time = (xTaskGetTickCount() / 2) + mc_conf.m_fault_stop_time_ms;
