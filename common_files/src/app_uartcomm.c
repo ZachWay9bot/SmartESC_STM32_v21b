@@ -34,6 +34,7 @@
 #include "task_LED.h"
 #include "timers.h"
 #include <math.h>
+#include <string.h>
 
 NinebotPack frame;
 
