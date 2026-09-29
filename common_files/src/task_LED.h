@@ -25,6 +25,7 @@
 #define TASK_LED_H_
 
 #include "cmsis_os.h"
+#include <stdbool.h>
 
 extern osThreadId_t task_LED_handle;
 
@@ -35,6 +36,10 @@ typedef enum {
 
 void task_LED_init();
 void task_LED_set_brake_light(en_brake mode);
+
+/* G30 STAR/DELTA helper state. On non-G30 targets these return false. */
+bool task_delta_coast_required(void);
+bool task_delta_is_active(void);
 
 
 
