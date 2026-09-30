@@ -56,6 +56,7 @@
 #define DELTA_RELAY_ENABLE                                                  1
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
+#define SESC_SHU_MAX_APP_BYTES                                              (52u * 1024u)
 #define TRUE_COAST_IQ_A                                                     (1.5f)
 #define DELTA_ENTER_SPEED_KMH                                               (32.0f)
 #define DELTA_EXIT_SPEED_KMH                                                (26.0f)
