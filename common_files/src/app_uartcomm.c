@@ -77,18 +77,12 @@ static void shu_rx_reset(void) {
 
 static bool shu_update_opcode(uint8_t cmd, uint8_t arg) {
 	/*
-	 * Verified stock G30 dispatch contains 0x50/0x57..0x59/0x5C in the
-	 * IAP/update/calibration family. 0x50 and 0x57 are used as conservative
-	 * update-entry candidates. The WRITE-to-ARG-0x07 case is retained for
-	 * older Ninebot flasher implementations.
+	 * Classic G30 IAP start is a write to register 0x07. Do not treat the
+	 * other extended Ninebot opcodes as update entry here: some firmware
+	 * revisions reuse them for calibration/streaming and an accidental reset
+	 * is much less entertaining on a motor controller than it sounds.
 	 */
-	if(cmd == 0x50 || cmd == 0x57) {
-		return true;
-	}
-	if((cmd == 0x02 || cmd == 0x03) && arg == 0x07) {
-		return true;
-	}
-	return false;
+	return (cmd == 0x02 || cmd == 0x03) && arg == 0x07;
 }
 
 static bool shu_feed_stock_frame(uint8_t b) {
@@ -116,8 +110,8 @@ static bool shu_feed_stock_frame(uint8_t b) {
 		shu_rx.body[shu_rx.index++] = b;
 
 		if(shu_rx.index == 1) {
-			/* body = LEN SRC DST CMD ARG payload CKlo CKhi */
-			uint16_t expected = (uint16_t)shu_rx.body[0] + 7u;
+			/* body = LEN + LEN bytes (SRC..payload) + CKlo + CKhi */
+			uint16_t expected = (uint16_t)shu_rx.body[0] + 3u;
 			if(expected < 7u || expected > sizeof(shu_rx.body)) {
 				shu_rx_reset();
 				break;
@@ -162,6 +156,36 @@ static bool shu_feed_stock_frame(uint8_t b) {
 	return false;
 }
 
+#define G30_STOCK_APP_VECTOR_BASE 0x08001000u
+
+static bool shu_invalidate_app_vector(void) {
+	/*
+	 * The stock bootloader has a recovery path for an invalid application.
+	 * Clearing the upper half-word of the application's initial stack pointer
+	 * changes e.g. 0x2000xxxx into 0x0000xxxx without erasing any code page.
+	 *
+	 * That is preferable to guessing a revision-specific update-control block:
+	 * after reset the current SmartESC image is intentionally non-bootable and
+	 * the preserved stock IAP bootloader must remain in recovery/update mode.
+	 * A successful SHU flash writes a fresh vector table and restores normal
+	 * boot automatically.
+	 */
+	HAL_StatusTypeDef st;
+
+	if(HAL_FLASH_Unlock() != HAL_OK) {
+		return false;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
+
+	/* Program high half first. One successful write is enough to invalidate SP. */
+	st = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD,
+			G30_STOCK_APP_VECTOR_BASE + 2u, 0x0000u);
+
+	HAL_FLASH_Lock();
+	return st == HAL_OK;
+}
+
 static void shu_handoff_to_stock_iap(void) {
 	/* Never enter a flasher while the wheel is moving. */
 	if(fabsf(VescToSTM_get_speed()) > 0.5f) {
@@ -175,11 +199,18 @@ static void shu_handoff_to_stock_iap(void) {
 		return;
 	}
 
-	/* Fail-safe STAR before handing control to the stock bootloader. */
+	/* Fail-safe STAR and high-Z inverter before committing to IAP recovery. */
 	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
 	VescToSTM_pwm_stop();
 	vTaskDelay(MS_TO_TICKS(10));
 
+	if(!shu_invalidate_app_vector()) {
+		/* Keep the current firmware running if flash programming was rejected. */
+		VescToSTM_pwm_start();
+		return;
+	}
+
+	__disable_irq();
 	NVIC_SystemReset();
 }
 #endif
