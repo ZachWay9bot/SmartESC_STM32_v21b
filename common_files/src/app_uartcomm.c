@@ -158,7 +158,7 @@ static bool shu_feed_stock_frame(uint8_t b) {
 
 #define G30_STOCK_APP_VECTOR_BASE 0x08001000u
 
-static bool shu_invalidate_app_vector(void) {
+bool app_shu_invalidate_app_vector(void) {
 	/*
 	 * The stock bootloader has a recovery path for an invalid application.
 	 * Clearing the upper half-word of the application's initial stack pointer
@@ -204,7 +204,7 @@ static void shu_handoff_to_stock_iap(void) {
 	VescToSTM_pwm_stop();
 	vTaskDelay(MS_TO_TICKS(10));
 
-	if(!shu_invalidate_app_vector()) {
+	if(!app_shu_invalidate_app_vector()) {
 		/* Keep the current firmware running if flash programming was rejected. */
 		VescToSTM_pwm_start();
 		return;
