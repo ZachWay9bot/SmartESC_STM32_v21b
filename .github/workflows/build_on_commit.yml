@@ -51,7 +51,7 @@ jobs:
       with:
         path: |
           ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
-          ${{ github.workspace }}/SmartESC_G30_SHU_Coast_Delta.zip"
+          ${{ github.workspace }}/SmartESC_G30_SHU_Coast_Delta.zip
         name: g30p-shu-${{ github.run_number }}
         retention-days: 5
 
