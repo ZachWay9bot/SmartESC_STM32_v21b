@@ -300,9 +300,11 @@ uint16_t g30_bms_get_status(void) {
 	return g30_bms_state.status;
 }
 
-static void g30_bms_init(void) {
-	xTaskCreate(task_g30_bms, "tskBMS", 192, NULL, PRIO_BELOW_NORMAL,
-			&g30_bms_task_handle);
+void g30_bms_init(void) {
+	if(g30_bms_task_handle == NULL) {
+		xTaskCreate(task_g30_bms, "tskBMS", 192, NULL, PRIO_BELOW_NORMAL,
+				&g30_bms_task_handle);
+	}
 }
 
 #endif /* G30P */
