@@ -30,18 +30,8 @@ jobs:
         # enable workflow command processing
         echo "::`echo -n ${{ github.token }} | sha256sum | head -c 64`::"
         
-    - name: 'Build M365'
-      uses: docker://wsbu/stm32cubeide:latest
-      with:
-        entrypoint: /opt/stm32cubeide/stm32cubeide
-        args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
-    
-    - name: 'Upload Artifact M365 - with build number'
-      uses: actions/upload-artifact@v4
-      with:
-        path: ${{ github.workspace }}/m365/STM32CubeIDE/Debug/m365.bin
-        name: m365-${{ github.run_number }}
-        retention-days: 5
+    - name: 'SHU source preflight'
+      run: python3 tools/test_shu_preflight.py
 
     - name: 'Build G30P'
       uses: docker://wsbu/stm32cubeide:latest
@@ -62,4 +52,17 @@ jobs:
           ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
           ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/SmartESC_G30_SHU_Coast_Delta.zip
         name: g30p-shu-${{ github.run_number }}
+        retention-days: 5
+
+    - name: 'Build M365 regression target'
+      uses: docker://wsbu/stm32cubeide:latest
+      with:
+        entrypoint: /opt/stm32cubeide/stm32cubeide
+        args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
+
+    - name: 'Upload Artifact M365 - with build number'
+      uses: actions/upload-artifact@v4
+      with:
+        path: ${{ github.workspace }}/m365/STM32CubeIDE/Debug/m365.bin
+        name: m365-${{ github.run_number }}
         retention-days: 5
