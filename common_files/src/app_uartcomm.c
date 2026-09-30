@@ -75,20 +75,60 @@ static void shu_rx_reset(void) {
 	memset(&shu_rx, 0, sizeof(shu_rx));
 }
 
-static bool shu_update_opcode(uint8_t cmd, uint8_t arg) {
-	/*
-	 * Classic G30 IAP start is a write to register 0x07. Do not treat the
-	 * other extended Ninebot opcodes as update entry here: some firmware
-	 * revisions reuse them for calibration/streaming and an accidental reset
-	 * is much less entertaining on a motor controller than it sounds.
-	 */
-	return (cmd == 0x02 || cmd == 0x03) && arg == 0x07;
+/*
+ * IAP start has exactly four payload bytes on the reversible G30 build:
+ *   uint16_t firmware_size_le
+ *   uint16_t version_le
+ *
+ * There are two LEN conventions in public Ninebot tooling:
+ *   - firmware-verified G30 framing: LEN == payload bytes      -> LEN = 4
+ *   - older flasher tooling:         LEN == 4 + payload bytes -> LEN = 8
+ *
+ * Both produce the same 11-byte body after 5A A5:
+ *   LEN SRC DST CMD ARG PAY0 PAY1 PAY2 PAY3 CK_LO CK_HI
+ *
+ * We deliberately recognize only this exact, checksum-valid IAP-start shape.
+ * That matters because entering recovery invalidates the current app vector;
+ * a fuzzy opcode detector would be a remarkably stupid place to be generous.
+ */
+#define SHU_IAP_START_BODY_BYTES 11u
+
+static bool shu_is_iap_start(void) {
+	const uint8_t len = shu_rx.body[0];
+	const uint8_t src = shu_rx.body[1];
+	const uint8_t dst = shu_rx.body[2];
+	const uint8_t cmd = shu_rx.body[3];
+	const uint8_t arg = shu_rx.body[4];
+
+	if(len != 4u && len != 8u) {
+		return false;
+	}
+
+	if(dst != 0x20u || (src != 0x21u && src != 0x3Eu && src != 0x3Fu)) {
+		return false;
+	}
+
+	if((cmd != 0x02u && cmd != 0x03u) || arg != 0x07u) {
+		return false;
+	}
+
+	const uint16_t fw_size =
+			(uint16_t)shu_rx.body[5] |
+			((uint16_t)shu_rx.body[6] << 8);
+
+	if(fw_size < 256u || (uint32_t)fw_size > SESC_SHU_MAX_APP_BYTES) {
+		return false;
+	}
+
+	return true;
 }
 
 static bool shu_feed_stock_frame(uint8_t b) {
 	switch(shu_rx.state) {
 	case 0:
-		if(b == 0x5A) shu_rx.state = 1;
+		if(b == 0x5A) {
+			shu_rx.state = 1;
+		}
 		break;
 
 	case 1:
@@ -97,7 +137,7 @@ static bool shu_feed_stock_frame(uint8_t b) {
 			shu_rx.index = 0;
 			shu_rx.expected = 0;
 		} else if(b != 0x5A) {
-			shu_rx.state = 0;
+			shu_rx_reset();
 		}
 		break;
 
@@ -109,40 +149,31 @@ static bool shu_feed_stock_frame(uint8_t b) {
 
 		shu_rx.body[shu_rx.index++] = b;
 
-		if(shu_rx.index == 1) {
-			/* body = LEN + LEN bytes (SRC..payload) + CKlo + CKhi */
-			uint16_t expected = (uint16_t)shu_rx.body[0] + 3u;
-			if(expected < 7u || expected > sizeof(shu_rx.body)) {
+		if(shu_rx.index == 1u) {
+			/*
+			 * Only the exact 4-byte IAP-start payload is interesting here.
+			 * Accept LEN=4 (verified convention) and LEN=8 (legacy tooling).
+			 */
+			if(shu_rx.body[0] == 4u || shu_rx.body[0] == 8u) {
+				shu_rx.expected = SHU_IAP_START_BODY_BYTES;
+			} else {
 				shu_rx_reset();
 				break;
 			}
-			shu_rx.expected = (uint8_t)expected;
 		}
 
 		if(shu_rx.expected && shu_rx.index == shu_rx.expected) {
 			uint16_t sum = 0;
-			for(uint8_t i = 0; i < (uint8_t)(shu_rx.expected - 2u); i++) {
+			for(uint8_t i = 0; i < (uint8_t)(SHU_IAP_START_BODY_BYTES - 2u); i++) {
 				sum = (uint16_t)(sum + shu_rx.body[i]);
 			}
+
 			const uint16_t calc = (uint16_t)(~sum);
 			const uint16_t recv =
-					(uint16_t)shu_rx.body[shu_rx.expected - 2u] |
-					((uint16_t)shu_rx.body[shu_rx.expected - 1u] << 8);
+					(uint16_t)shu_rx.body[SHU_IAP_START_BODY_BYTES - 2u] |
+					((uint16_t)shu_rx.body[SHU_IAP_START_BODY_BYTES - 1u] << 8);
 
-			bool request = false;
-			if(calc == recv) {
-				const uint8_t src = shu_rx.body[1];
-				const uint8_t dst = shu_rx.body[2];
-				const uint8_t cmd = shu_rx.body[3];
-				const uint8_t arg = shu_rx.body[4];
-
-				if(dst == 0x20 &&
-				   (src == 0x21 || src == 0x3E || src == 0x3F) &&
-				   shu_update_opcode(cmd, arg)) {
-					request = true;
-				}
-			}
-
+			const bool request = (calc == recv) && shu_is_iap_start();
 			shu_rx_reset();
 			return request;
 		}
