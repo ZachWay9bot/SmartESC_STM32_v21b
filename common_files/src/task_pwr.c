@@ -150,14 +150,19 @@ void task_PWR(void *argument) {
 			  case VERY_LONG_PRESS :   {
 #if defined(G30P) && SESC_SHU_COMPAT
 				  /*
-				   * Manual recovery path: at standstill, reboot while the dashboard
-				   * power button is still physically held. This gives the preserved
-				   * stock IAP bootloader the same held-button condition during reset.
+				   * Manual recovery path. Once the scooter is stationary and Iq has
+				   * collapsed, deliberately invalidate only the application's initial
+				   * stack-pointer word. On reset the preserved stock bootloader sees
+				   * an invalid app and remains available for a recovery flash.
 				   */
-				  if(fabsf(VescToSTM_get_speed()) < 0.5f) {
+				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
+					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
 					  HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
 					  VescToSTM_pwm_stop();
-					  NVIC_SystemReset();
+					  if(app_shu_invalidate_app_vector()) {
+						  __disable_irq();
+						  NVIC_SystemReset();
+					  }
 				  }
 #endif
 			  } break ;
