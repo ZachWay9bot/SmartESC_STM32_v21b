@@ -57,6 +57,10 @@
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
 #define SESC_SHU_MAX_APP_BYTES                                              (52u * 1024u)
+#define G30_BMS_ACTIVATOR_ENABLE                                            1
+#define G30_BMS_ACTIVATOR_PERIOD_MS                                         (200u)
+#define G30_BMS_POLL_PERIOD_MS                                              (400u)
+#define G30_BMS_ONLINE_TIMEOUT_MS                                           (2000u)
 #define TRUE_COAST_IQ_A                                                     (1.5f)
 #define DELTA_ENTER_SPEED_KMH                                               (32.0f)
 #define DELTA_EXIT_SPEED_KMH                                                (26.0f)
