@@ -604,8 +604,15 @@ void task_app(void * argument)
 
 			}
 			m365_to_display.speed *= DIR_MUL;
-			int temp = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
-			m365_to_display.battery = temp>100?100:temp;
+#ifdef G30P
+			if(g30_bms_is_online()) {
+				m365_to_display.battery = g30_bms_get_soc();
+			} else
+#endif
+			{
+				int temp = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
+				m365_to_display.battery = temp>100?100:temp;
+			}
 			m365_to_display.beep=0;
 			m365_to_display.faultcode=pMCI[M1]->pSTM->hFaultOccurred;
 
