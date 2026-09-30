@@ -41,6 +41,7 @@ extern port_str main_uart;
 extern port_str aux_uart;
 
 #ifdef G30P
+void g30_bms_init(void);
 bool g30_bms_is_online(void);
 uint8_t g30_bms_get_soc(void);
 uint16_t g30_bms_get_voltage_10mv(void);
