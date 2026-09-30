@@ -146,7 +146,7 @@ def main() -> int:
     ap.add_argument("output", type=Path, help="output SHU ZIP")
     ap.add_argument(
         "--name",
-        default="SmartESC G30 SHU Coast+Delta",
+        default="SmartESC G30 SHU Coast+Delta+BMS",
         help="displayName stored in info.json",
     )
     args = ap.parse_args()
@@ -178,6 +178,7 @@ def main() -> int:
         "Brake: motor cut, no regenerative braking\n"
         "STAR/DELTA: rear-light output, DELTA >= 32 km/h, STAR <= 26 km/h\n"
         "Relay switching: wait for |Iq| <= 2 A, then 100 ms settle\n"
+        "Stock BMS: USART3 heartbeat/activator every 200 ms + read-only telemetry\n"
         f"Image size: {len(plain)} bytes\n"
         f"Initial SP: 0x{sp:08X}\n"
         f"Reset handler: 0x{reset:08X}\n"
