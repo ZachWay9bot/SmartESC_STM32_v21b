@@ -52,6 +52,28 @@ def test_layout() -> None:
     require_text(product, "(52u * 1024u)")
 
 
+def test_bms_activator_source() -> None:
+    product = ROOT / "common_files" / "inc" / "product.h"
+    task_init = ROOT / "common_files" / "src" / "task_init.c"
+    app_uart = ROOT / "common_files" / "src" / "app_uartcomm.c"
+
+    require_text(product, "G30_BMS_ACTIVATOR_PERIOD_MS")
+    require_text(product, "(200u)")
+    require_text(
+        task_init,
+        "0x5A, 0xA5, 0x06, 0x20, 0x22, 0x30, 0x00, 0x00, 0x87, 0xFF, 0xFF",
+    )
+    require_text(task_init, "HAL_UART_Receive_DMA(&APP2_USART_DMA")
+    require_text(task_init, "poll_regs[] = {0x32, 0x33, 0x34, 0x35, 0x30}")
+    require_text(app_uart, "g30_bms_is_online()")
+    require_text(app_uart, "g30_bms_get_soc()")
+
+    # Activator checksum as used by the public Ninebot-BMS-Activator:
+    # checksum covers 06 20 22 30 00 00 and is stored little-endian.
+    activation_body = bytes([0x06, 0x20, 0x22, 0x30, 0x00, 0x00])
+    assert checksum16(activation_body) == 0xFF87
+
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -125,6 +147,7 @@ def test_ninebottea_and_zip() -> None:
 
 def main() -> int:
     test_layout()
+    test_bms_activator_source()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")
