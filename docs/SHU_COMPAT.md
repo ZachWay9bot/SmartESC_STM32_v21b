@@ -43,19 +43,33 @@ The script refuses a binary whose vector table is not linked for
 
 ## Returning to the stock bootloader
 
-A second, checksum-validated stock Ninebot `5A A5` parser runs alongside the
-existing SmartESC dashboard parser. At standstill it watches for conservative
-stock IAP/update-entry commands and then:
+A second stock Ninebot `5A A5` sniffer runs alongside the existing
+SmartESC dashboard parser. It does **not** treat generic extended opcodes as an
+update request. It only accepts a checksum-valid ESC IAP-start write to
+register `0x07` with the expected four-byte `firmware-size + version`
+payload and a plausible firmware size. To tolerate the split in public tooling,
+it accepts both `LEN=4` (payload-byte convention) and `LEN=8` (older tools
+that include the four routing bytes).
+
+At standstill the handoff then:
 
 1. commands zero motor current,
 2. waits for low measured Iq,
 3. forces the STAR relay state,
 4. disables motor PWM,
-5. resets the MCU so the preserved stock bootloader gets control.
+5. programs only the upper half-word of the SmartESC initial stack pointer to
+   zero, intentionally making the application vector invalid,
+6. resets the MCU so the preserved stock bootloader must take the recovery/IAP
+   path.
 
-There is also a manual recovery path: holding the power button for more than
-five seconds while stationary resets the controller while the button is still
-physically held.
+A successful SHU flash writes a fresh application vector and restores normal
+boot. The same recovery entry is available manually by holding the power button
+for more than five seconds while stationary.
+
+The vector invalidation is intentionally one-way until another firmware is
+flashed. That makes the recovery trigger robust, but it is also why the first
+hardware validation must be done with an ST-Link and a verified full-flash
+backup within reach.
 
 ## Validation status
 
