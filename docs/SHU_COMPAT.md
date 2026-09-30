@@ -28,6 +28,37 @@ region ends at `0x0800DFFF`. If SmartESC does not link inside this region,
 the SHU build must be slimmed down rather than silently consuming the stock
 staging area.
 
+## Stock G30 BMS integration
+
+The reversible G30 build keeps the factory BMS on its dedicated USART3 link
+(PB10 TX / PB11 RX, 115200 8N1).
+
+To avoid the stock BMS no-communication current fallback, the firmware sends
+the byte sequence demonstrated by `rasil1127/Ninebot-BMS-Activator` every
+200 ms:
+
+```
+5A A5 06 20 22 30 00 00 87 FF FF
+```
+
+The final `FF` is intentionally retained for byte-for-byte compatibility with
+the public activator implementation.
+
+The same task also performs read-only stock-protocol polling for:
+
+- `0x32` state of charge
+- `0x33` pack current
+- `0x34` pack voltage
+- `0x35` temperature
+- `0x30` status
+
+When valid BMS telemetry is present, the stock dashboard battery percentage is
+fed from BMS SOC. If BMS telemetry is absent, the existing voltage-derived
+battery estimate remains as fallback.
+
+This does not rewrite BMS current/protection settings and does not disable the
+BMS hardware protection paths.
+
 ## SHU package
 
 `tools/make_shu_zip.py` creates a ZIPv3 package containing:
