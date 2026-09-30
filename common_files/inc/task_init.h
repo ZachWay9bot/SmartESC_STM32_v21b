@@ -40,4 +40,13 @@ void task_init();
 extern port_str main_uart;
 extern port_str aux_uart;
 
+#ifdef G30P
+bool g30_bms_is_online(void);
+uint8_t g30_bms_get_soc(void);
+uint16_t g30_bms_get_voltage_10mv(void);
+int16_t g30_bms_get_current_10ma(void);
+int16_t g30_bms_get_temp_deci_c(void);
+uint16_t g30_bms_get_status(void);
+#endif
+
 #endif /* TASK_INIT_H_ */
