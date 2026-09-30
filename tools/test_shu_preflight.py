@@ -55,6 +55,7 @@ def test_layout() -> None:
 def test_bms_activator_source() -> None:
     product = ROOT / "common_files" / "inc" / "product.h"
     task_init = ROOT / "common_files" / "src" / "task_init.c"
+    app_core = ROOT / "common_files" / "src" / "app.c"
     app_uart = ROOT / "common_files" / "src" / "app_uartcomm.c"
 
     require_text(product, "G30_BMS_ACTIVATOR_PERIOD_MS")
@@ -65,6 +66,7 @@ def test_bms_activator_source() -> None:
     )
     require_text(task_init, "HAL_UART_Receive_DMA(&APP2_USART_DMA")
     require_text(task_init, "poll_regs[] = {0x32, 0x33, 0x34, 0x35, 0x30}")
+    require_text(app_core, "g30_bms_init();")
     require_text(app_uart, "g30_bms_is_online()")
     require_text(app_uart, "g30_bms_get_soc()")
 
