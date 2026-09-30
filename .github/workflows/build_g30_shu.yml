@@ -42,7 +42,7 @@ jobs:
           test -s "$BIN"
           python3 tools/make_shu_zip.py \
             "$BIN" \
-            "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/SmartESC_G30_SHU_Coast_Delta.zip"
+            "${{ github.workspace }}/SmartESC_G30_SHU_Coast_Delta.zip"
           python3 - <<'PY'
           import struct
           from pathlib import Path
@@ -66,4 +66,4 @@ jobs:
             g30p/STM32CubeIDE/Debug/g30p.bin
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map
-            g30p/STM32CubeIDE/Debug/SmartESC_G30_SHU_Coast_Delta.zip
+            SmartESC_G30_SHU_Coast_Delta.zip
