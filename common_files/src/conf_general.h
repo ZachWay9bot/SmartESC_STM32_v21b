@@ -63,7 +63,6 @@ typedef struct {
 	uint8_t motor_poles;
 	uint8_t flags;
 	uint8_t hall_table[8];
-	uint8_t reserved[8];
 } g30_sesc_config_t;
 
 void g30_config_init(void);
@@ -86,6 +85,7 @@ void conf_general_read_mc_configuration(mc_configuration *conf, bool is_motor_2)
 bool conf_general_store_mc_configuration(mc_configuration *conf, bool is_motor_2);
 void conf_update_override_current(mc_configuration *mcconf);
 void conf_general_setup_mc(mc_configuration *mcconf);
+void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float tc);
 void conf_general_update_current(mc_configuration *mcconf);
 mc_configuration* mc_interface_get_configuration(void);
 bool conf_general_store_app_configuration(app_configuration *conf);
