@@ -403,14 +403,41 @@ static void sesc_detect_restore_star(void) {
 	app_check_timer();
 }
 
+static void sesc_detect_restore_original(const mc_configuration *original) {
+	const g30_sesc_config_t *cfg = g30_config_get();
+
+	VescToSTM_set_current_rel(0.0f);
+	vTaskDelay(MS_TO_TICKS(30u));
+	VescToSTM_pwm_stop();
+	vTaskDelay(MS_TO_TICKS(20u));
+
+	(void)task_delta_setup_force(false);
+	vTaskDelay(MS_TO_TICKS(cfg->relay_settle_ms));
+
+	if(original != NULL) {
+		mc_conf = *original;
+		conf_general_setup_mc(&mc_conf);
+	}
+
+	task_delta_setup_release();
+	app_disable_output(0);
+	app_check_timer();
+}
+
 static void sesc_detect_task(void *argument) {
 	(void)argument;
 	const bool delta = sesc_detect_target_delta != 0u;
 	const g30_sesc_config_t *cfg = g30_config_get();
 	g30_foc_profile_t profile;
 	uint8_t hall[8];
+	mc_configuration *original = pvPortMalloc(sizeof(mc_configuration));
 
 	sesc_detect_error = 0;
+	if(original == NULL) {
+		sesc_detect_error = -9;
+		goto fail;
+	}
+	*original = mc_conf;
 	sesc_detect_progress = 5;
 	sesc_detect_state = SESC_DETECT_PREPARE;
 
@@ -518,6 +545,9 @@ static void sesc_detect_task(void *argument) {
 
 	sesc_detect_progress = 95;
 	sesc_detect_restore_star();
+	if(original != NULL) {
+		vPortFree(original);
+	}
 	sesc_detect_state = SESC_DETECT_DONE;
 	sesc_detect_progress = 100;
 	sesc_detect_task_handle = NULL;
@@ -525,8 +555,11 @@ static void sesc_detect_task(void *argument) {
 	return;
 
 fail_restore:
-	sesc_detect_restore_star();
+	sesc_detect_restore_original(original);
 fail:
+	if(original != NULL) {
+		vPortFree(original);
+	}
 	sesc_detect_state = SESC_DETECT_ERROR;
 	sesc_detect_progress = 0;
 	sesc_detect_task_handle = NULL;
@@ -536,7 +569,8 @@ fail:
 static bool sesc_cfg_start_detect(bool delta, uint16_t power_loss_w) {
 	if(sesc_detect_task_handle != NULL ||
 	   !sesc_cfg_stationary() ||
-	   power_loss_w < 20u || power_loss_w > 500u) {
+	   power_loss_w < 20u || power_loss_w > 500u ||
+	   (delta && !g30_config_profile_valid(false))) {
 		return false;
 	}
 
