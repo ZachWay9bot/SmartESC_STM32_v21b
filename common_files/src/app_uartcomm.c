@@ -32,6 +32,8 @@
 #include "VescCommand.h"
 #include "task_init.h"
 #include "task_LED.h"
+#include "conf_general.h"
+#include "tune.h"
 #include "timers.h"
 #include <math.h>
 #include <string.h>
@@ -243,6 +245,516 @@ static void shu_handoff_to_stock_iap(void) {
 
 	__disable_irq();
 	NVIC_SystemReset();
+}
+
+
+/*
+ * SmartESC G30 companion-app protocol.
+ *
+ * Transport is the normal stock Ninebot 5A A5 route through the BLE/dashboard
+ * board. This deliberately does not impersonate SHFW. It is a small private
+ * protocol used only by the SmartESC Config companion app.
+ *
+ *   CMD 0x7D
+ *   ARG 0x00 HELLO
+ *       0x01 TELEMETRY
+ *       0x02 GET_COMMON
+ *       0x03 SET_COMMON (RAM)
+ *       0x04 GET_PROFILE
+ *       0x05 SET_PROFILE (RAM)
+ *       0x06 SAVE
+ *       0x07 DETECT STAR/DELTA
+ *       0x08 DETECT_STATUS
+ */
+#define SESC_CFG_CMD                 0x7Du
+#define SESC_CFG_PROTOCOL_VERSION    1u
+
+enum {
+	SESC_CFG_HELLO = 0x00,
+	SESC_CFG_TELEMETRY = 0x01,
+	SESC_CFG_GET_COMMON = 0x02,
+	SESC_CFG_SET_COMMON = 0x03,
+	SESC_CFG_GET_PROFILE = 0x04,
+	SESC_CFG_SET_PROFILE = 0x05,
+	SESC_CFG_SAVE = 0x06,
+	SESC_CFG_DETECT = 0x07,
+	SESC_CFG_DETECT_STATUS = 0x08
+};
+
+enum {
+	SESC_DETECT_IDLE = 0,
+	SESC_DETECT_PREPARE,
+	SESC_DETECT_RL,
+	SESC_DETECT_FLUX,
+	SESC_DETECT_HALL,
+	SESC_DETECT_DONE,
+	SESC_DETECT_ERROR
+};
+
+typedef struct {
+	uint8_t state;
+	uint8_t index;
+	uint8_t expected;
+	uint8_t body[80];
+} sesc_cfg_rx_t;
+
+static sesc_cfg_rx_t sesc_cfg_rx;
+static volatile uint8_t sesc_detect_state = SESC_DETECT_IDLE;
+static volatile int8_t sesc_detect_error = 0;
+static volatile uint8_t sesc_detect_target_delta = 0;
+static volatile uint8_t sesc_detect_progress = 0;
+static uint16_t sesc_detect_power_loss_w = 100u;
+static TaskHandle_t sesc_detect_task_handle = NULL;
+
+static void sesc_cfg_rx_reset(void) {
+	memset(&sesc_cfg_rx, 0, sizeof(sesc_cfg_rx));
+}
+
+static uint16_t sesc_cfg_checksum(const uint8_t *data, uint8_t len) {
+	uint16_t sum = 0;
+	for(uint8_t i = 0; i < len; i++) {
+		sum = (uint16_t)(sum + data[i]);
+	}
+	return (uint16_t)(~sum);
+}
+
+static void sesc_put_u16(uint8_t *p, uint16_t v) {
+	p[0] = (uint8_t)(v & 0xFFu);
+	p[1] = (uint8_t)(v >> 8);
+}
+
+static void sesc_put_i16(uint8_t *p, int16_t v) {
+	sesc_put_u16(p, (uint16_t)v);
+}
+
+static void sesc_put_u32(uint8_t *p, uint32_t v) {
+	p[0] = (uint8_t)(v & 0xFFu);
+	p[1] = (uint8_t)((v >> 8) & 0xFFu);
+	p[2] = (uint8_t)((v >> 16) & 0xFFu);
+	p[3] = (uint8_t)((v >> 24) & 0xFFu);
+}
+
+static uint16_t sesc_get_u16(const uint8_t *p) {
+	return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+}
+
+static uint32_t sesc_get_u32(const uint8_t *p) {
+	return (uint32_t)p[0] |
+			((uint32_t)p[1] << 8) |
+			((uint32_t)p[2] << 16) |
+			((uint32_t)p[3] << 24);
+}
+
+static bool sesc_cfg_stationary(void) {
+	const g30_sesc_config_t *cfg = g30_config_get();
+	return fabsf(VescToSTM_get_speed()) < 0.10f &&
+			fabsf(VescToSTM_get_iq()) <= cfg->switch_iq_a &&
+			app_adc_get_decoded_level() <= 0.02f;
+}
+
+static void sesc_cfg_reply(port_str *port, uint8_t dst, uint8_t arg,
+		const uint8_t *payload, uint8_t payload_len) {
+	uint8_t out[64];
+	if(payload_len > 48u) {
+		payload_len = 48u;
+	}
+
+	out[0] = 0x5A;
+	out[1] = 0xA5;
+	out[2] = payload_len;
+	out[3] = 0x20; /* ESC */
+	out[4] = dst;
+	out[5] = SESC_CFG_CMD;
+	out[6] = arg;
+	if(payload_len && payload != NULL) {
+		memcpy(&out[7], payload, payload_len);
+	}
+
+	const uint8_t ck_len = (uint8_t)(5u + payload_len);
+	const uint16_t ck = sesc_cfg_checksum(&out[2], ck_len);
+	out[7u + payload_len] = (uint8_t)(ck & 0xFFu);
+	out[8u + payload_len] = (uint8_t)(ck >> 8);
+
+	my_uart_send_data(out, (uint8_t)(9u + payload_len), port);
+}
+
+static uint8_t sesc_hall_diff(uint8_t a, uint8_t b) {
+	if(a == 255u || b == 255u) {
+		return a == b ? 0u : 255u;
+	}
+	uint8_t d = a > b ? (uint8_t)(a - b) : (uint8_t)(b - a);
+	return d > 127u ? (uint8_t)(255u - d) : d;
+}
+
+static void sesc_detect_restore_star(void) {
+	const g30_sesc_config_t *cfg = g30_config_get();
+
+	VescToSTM_set_current_rel(0.0f);
+	vTaskDelay(MS_TO_TICKS(30u));
+	VescToSTM_pwm_stop();
+	vTaskDelay(MS_TO_TICKS(20u));
+
+	(void)task_delta_setup_force(false);
+	vTaskDelay(MS_TO_TICKS(cfg->relay_settle_ms));
+	(void)g30_config_apply_runtime_profile(false);
+
+	task_delta_setup_release();
+	app_disable_output(0);
+	app_check_timer();
+}
+
+static void sesc_detect_task(void *argument) {
+	(void)argument;
+	const bool delta = sesc_detect_target_delta != 0u;
+	const g30_sesc_config_t *cfg = g30_config_get();
+	g30_foc_profile_t profile;
+	uint8_t hall[8];
+
+	sesc_detect_error = 0;
+	sesc_detect_progress = 5;
+	sesc_detect_state = SESC_DETECT_PREPARE;
+
+	if(!sesc_cfg_stationary()) {
+		sesc_detect_error = -1;
+		goto fail;
+	}
+
+	app_disable_output(-1);
+	app_adc_stop_output();
+	VescToSTM_set_current_rel(0.0f);
+	vTaskDelay(MS_TO_TICKS(100u));
+
+	if(fabsf(VescToSTM_get_iq()) > cfg->switch_iq_a) {
+		sesc_detect_error = -2;
+		goto fail_restore;
+	}
+
+	VescToSTM_pwm_stop();
+	vTaskDelay(MS_TO_TICKS(20u));
+	(void)task_delta_setup_force(delta);
+	vTaskDelay(MS_TO_TICKS(cfg->relay_settle_ms));
+
+	/*
+	 * For the very first DELTA measurement there is no DELTA profile yet.
+	 * Start from the already conservative STAR controller parameters; R/L are
+	 * measured before the motor is spun for flux detection.
+	 */
+	float r = 0.0f;
+	float l = 0.0f;
+	float i_max = 0.0f;
+	const float current_ceiling =
+			mc_conf.l_current_max > 10.0f ? mc_conf.l_current_max : 30.0f;
+
+	sesc_detect_state = SESC_DETECT_RL;
+	sesc_detect_progress = 20;
+	if(!tune_foc_measure_r_l_imax(mc_conf.cc_min_current, current_ceiling,
+			(float)sesc_detect_power_loss_w, &r, &l, &i_max) ||
+	   r <= 0.0f || l <= 0.0f) {
+		sesc_detect_error = -3;
+		goto fail_restore;
+	}
+
+	/* Apply measured R/L before the open-loop flux run. */
+	mc_conf.foc_motor_r = r;
+	mc_conf.foc_motor_l = l;
+	mc_conf.l_current_max = i_max;
+	mc_conf.l_current_min = -i_max;
+	conf_general_calc_apply_foc_cc_kp_ki_gain(&mc_conf, 1000.0f);
+	conf_general_setup_mc(&mc_conf);
+
+	sesc_detect_state = SESC_DETECT_FLUX;
+	sesc_detect_progress = 50;
+	float lambda = 0.0f;
+	float lambda_undriven = 0.0f;
+	float undriven_samples = 0.0f;
+	if(!tune_foc_measure_flux_linkage_openloop(i_max / 2.5f, 0.30f, 1800.0f,
+			r, l, &lambda, &lambda_undriven, &undriven_samples)) {
+		sesc_detect_error = -4;
+		goto fail_restore;
+	}
+	if(undriven_samples > 60.0f) {
+		lambda = lambda_undriven;
+	}
+	if(lambda <= 0.0f) {
+		sesc_detect_error = -5;
+		goto fail_restore;
+	}
+
+	mc_conf.foc_motor_flux_linkage = lambda;
+	conf_general_calc_apply_foc_cc_kp_ki_gain(&mc_conf, 1000.0f);
+	conf_general_setup_mc(&mc_conf);
+
+	sesc_detect_state = SESC_DETECT_HALL;
+	sesc_detect_progress = 75;
+	if(!tune_mcpwm_foc_hall_detect(i_max / 3.0f, hall)) {
+		sesc_detect_error = -6;
+		goto fail_restore;
+	}
+
+	if(delta && g30_config_profile_valid(false)) {
+		/*
+		 * STAR and DELTA do not move the Hall sensors. A large angle change
+		 * therefore indicates relay/phase wiring trouble, not a calibration
+		 * that should silently be accepted.
+		 */
+		for(uint8_t i = 0; i < 8u; i++) {
+			if(sesc_hall_diff(hall[i], cfg->hall_table[i]) > 16u) {
+				sesc_detect_error = -7;
+				goto fail_restore;
+			}
+		}
+	} else if(!delta) {
+		g30_config_set_hall_table(hall);
+	}
+
+	profile.r_ohm = r;
+	profile.l_h = l;
+	profile.flux_wb = lambda;
+	profile.phase_current_max_a = i_max;
+	if(!g30_config_set_profile(delta, &profile)) {
+		sesc_detect_error = -8;
+		goto fail_restore;
+	}
+
+	sesc_detect_progress = 95;
+	sesc_detect_restore_star();
+	sesc_detect_state = SESC_DETECT_DONE;
+	sesc_detect_progress = 100;
+	sesc_detect_task_handle = NULL;
+	vTaskDelete(NULL);
+	return;
+
+fail_restore:
+	sesc_detect_restore_star();
+fail:
+	sesc_detect_state = SESC_DETECT_ERROR;
+	sesc_detect_progress = 0;
+	sesc_detect_task_handle = NULL;
+	vTaskDelete(NULL);
+}
+
+static bool sesc_cfg_start_detect(bool delta, uint16_t power_loss_w) {
+	if(sesc_detect_task_handle != NULL ||
+	   !sesc_cfg_stationary() ||
+	   power_loss_w < 20u || power_loss_w > 500u) {
+		return false;
+	}
+
+	sesc_detect_target_delta = delta ? 1u : 0u;
+	sesc_detect_power_loss_w = power_loss_w;
+	sesc_detect_state = SESC_DETECT_PREPARE;
+	sesc_detect_progress = 1;
+	sesc_detect_error = 0;
+
+	return xTaskCreate(sesc_detect_task, "SESC-DET", 320, NULL,
+			PRIO_NORMAL, &sesc_detect_task_handle) == pdPASS;
+}
+
+static void sesc_cfg_handle_packet(port_str *port) {
+	const uint8_t len = sesc_cfg_rx.body[0];
+	const uint8_t src = sesc_cfg_rx.body[1];
+	const uint8_t dst = sesc_cfg_rx.body[2];
+	const uint8_t cmd = sesc_cfg_rx.body[3];
+	const uint8_t arg = sesc_cfg_rx.body[4];
+	const uint8_t *p = &sesc_cfg_rx.body[5];
+
+	if(dst != 0x20u || cmd != SESC_CFG_CMD ||
+	   (src != 0x3Eu && src != 0x21u && src != 0x3Fu)) {
+		return;
+	}
+
+	const g30_sesc_config_t *cfg = g30_config_get();
+	uint8_t out[48];
+	memset(out, 0, sizeof(out));
+
+	switch(arg) {
+	case SESC_CFG_HELLO:
+		out[0] = SESC_CFG_PROTOCOL_VERSION;
+		out[1] = cfg->flags;
+		out[2] = task_delta_is_active() ? 1u : 0u;
+		out[3] = sesc_detect_state;
+		out[4] = (uint8_t)sesc_detect_error;
+		out[5] = (uint8_t)(PRODUCT_FIRMWARE_VERSION & 0xFFu);
+		out[6] = (uint8_t)(PRODUCT_FIRMWARE_VERSION >> 8);
+		sesc_cfg_reply(port, src, arg, out, 7u);
+		break;
+
+	case SESC_CFG_TELEMETRY: {
+		const float speed = VescToSTM_get_speed() * 3.6f;
+		const float iq = VescToSTM_get_iq();
+		const float vin = VescToSTM_get_bus_voltage();
+		const float iin = VescToSTM_get_input_current();
+		sesc_put_i16(&out[0], (int16_t)(speed * 10.0f));
+		sesc_put_i16(&out[2], (int16_t)(iq * 10.0f));
+		sesc_put_u16(&out[4], (uint16_t)(vin * 10.0f));
+		sesc_put_i16(&out[6], (int16_t)(iin * 100.0f));
+		out[8] = g30_bms_is_online() ? g30_bms_get_soc() :
+				(uint8_t)utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
+		out[9] = task_delta_is_active() ? 1u : 0u;
+		sesc_put_u16(&out[10], pMCI[M1]->pSTM->hFaultOccurred);
+		out[12] = g30_bms_is_online() ? 1u : 0u;
+		out[13] = sesc_detect_state;
+		out[14] = sesc_detect_progress;
+		out[15] = (uint8_t)sesc_detect_error;
+		sesc_cfg_reply(port, src, arg, out, 16u);
+		break;
+	}
+
+	case SESC_CFG_GET_COMMON:
+		sesc_put_u16(&out[0], (uint16_t)(cfg->battery_current_max_a * 10.0f));
+		sesc_put_u16(&out[2], (uint16_t)(cfg->wheel_diameter_m * 1000.0f));
+		out[4] = cfg->motor_poles;
+		out[5] = cfg->flags;
+		sesc_put_u16(&out[6], (uint16_t)(cfg->delta_enter_kmh * 10.0f));
+		sesc_put_u16(&out[8], (uint16_t)(cfg->delta_exit_kmh * 10.0f));
+		sesc_put_u16(&out[10], (uint16_t)(cfg->switch_iq_a * 10.0f));
+		sesc_put_u16(&out[12], cfg->relay_settle_ms);
+		sesc_cfg_reply(port, src, arg, out, 14u);
+		break;
+
+	case SESC_CFG_SET_COMMON:
+		if(len < 14u || !sesc_cfg_stationary()) {
+			out[0] = 0u;
+		} else {
+			const float batt = (float)sesc_get_u16(&p[0]) / 10.0f;
+			const float wheel = (float)sesc_get_u16(&p[2]) / 1000.0f;
+			const uint8_t poles = p[4];
+			const bool auto_delta = (p[5] & G30_CFG_FLAG_AUTO_DELTA) != 0u;
+			const float enter = (float)sesc_get_u16(&p[6]) / 10.0f;
+			const float exit = (float)sesc_get_u16(&p[8]) / 10.0f;
+			const float switch_iq = (float)sesc_get_u16(&p[10]) / 10.0f;
+			const uint16_t settle = sesc_get_u16(&p[12]);
+			out[0] = g30_config_set_common(batt, wheel, poles, enter, exit,
+					switch_iq, settle, auto_delta) ? 1u : 0u;
+			if(out[0] && !task_delta_is_active()) {
+				(void)g30_config_apply_runtime_profile(false);
+			}
+		}
+		sesc_cfg_reply(port, src, arg, out, 1u);
+		break;
+
+	case SESC_CFG_GET_PROFILE: {
+		const bool delta = len >= 1u && p[0] != 0u;
+		const g30_foc_profile_t *pr = delta ? &cfg->delta : &cfg->star;
+		out[0] = delta ? 1u : 0u;
+		out[1] = g30_config_profile_valid(delta) ? 1u : 0u;
+		sesc_put_u32(&out[2], (uint32_t)(pr->r_ohm * 1000000.0f));
+		sesc_put_u32(&out[6], (uint32_t)(pr->l_h * 1000000000.0f));
+		sesc_put_u32(&out[10], (uint32_t)(pr->flux_wb * 1000000.0f));
+		sesc_put_u16(&out[14], (uint16_t)(pr->phase_current_max_a * 10.0f));
+		memcpy(&out[16], cfg->hall_table, 8u);
+		sesc_cfg_reply(port, src, arg, out, 24u);
+		break;
+	}
+
+	case SESC_CFG_SET_PROFILE:
+		if(len < 16u || !sesc_cfg_stationary()) {
+			out[0] = 0u;
+		} else {
+			g30_foc_profile_t pr;
+			const bool delta = p[0] != 0u;
+			pr.r_ohm = (float)sesc_get_u32(&p[2]) / 1000000.0f;
+			pr.l_h = (float)sesc_get_u32(&p[6]) / 1000000000.0f;
+			pr.flux_wb = (float)sesc_get_u32(&p[10]) / 1000000.0f;
+			pr.phase_current_max_a = (float)sesc_get_u16(&p[14]) / 10.0f;
+			out[0] = g30_config_set_profile(delta, &pr) ? 1u : 0u;
+			if(out[0] && delta == task_delta_is_active()) {
+				(void)g30_config_apply_runtime_profile(delta);
+			}
+		}
+		sesc_cfg_reply(port, src, arg, out, 1u);
+		break;
+
+	case SESC_CFG_SAVE:
+		out[0] = (sesc_cfg_stationary() &&
+				sesc_detect_task_handle == NULL &&
+				g30_config_store()) ? 1u : 0u;
+		sesc_cfg_reply(port, src, arg, out, 1u);
+		break;
+
+	case SESC_CFG_DETECT:
+		if(len < 3u) {
+			out[0] = 0u;
+		} else {
+			const bool delta = p[0] != 0u;
+			const uint16_t loss = sesc_get_u16(&p[1]);
+			out[0] = sesc_cfg_start_detect(delta, loss) ? 1u : 0u;
+		}
+		sesc_cfg_reply(port, src, arg, out, 1u);
+		break;
+
+	case SESC_CFG_DETECT_STATUS:
+		out[0] = sesc_detect_state;
+		out[1] = (uint8_t)sesc_detect_error;
+		out[2] = sesc_detect_target_delta;
+		out[3] = sesc_detect_progress;
+		sesc_cfg_reply(port, src, arg, out, 4u);
+		break;
+
+	default:
+		break;
+	}
+}
+
+static bool sesc_cfg_feed_stock_frame(uint8_t b) {
+	switch(sesc_cfg_rx.state) {
+	case 0:
+		if(b == 0x5A) {
+			sesc_cfg_rx.state = 1;
+		}
+		break;
+
+	case 1:
+		if(b == 0xA5) {
+			sesc_cfg_rx.state = 2;
+			sesc_cfg_rx.index = 0;
+			sesc_cfg_rx.expected = 0;
+		} else if(b != 0x5A) {
+			sesc_cfg_rx_reset();
+		}
+		break;
+
+	case 2:
+		if(sesc_cfg_rx.index >= sizeof(sesc_cfg_rx.body)) {
+			sesc_cfg_rx_reset();
+			break;
+		}
+
+		sesc_cfg_rx.body[sesc_cfg_rx.index++] = b;
+		if(sesc_cfg_rx.index == 1u) {
+			const uint16_t expected = (uint16_t)b + 7u;
+			if(expected < 7u || expected > sizeof(sesc_cfg_rx.body)) {
+				sesc_cfg_rx_reset();
+				break;
+			}
+			sesc_cfg_rx.expected = (uint8_t)expected;
+		}
+
+		if(sesc_cfg_rx.expected &&
+		   sesc_cfg_rx.index == sesc_cfg_rx.expected) {
+			const uint8_t data_len = (uint8_t)(sesc_cfg_rx.expected - 2u);
+			const uint16_t calc = sesc_cfg_checksum(sesc_cfg_rx.body, data_len);
+			const uint16_t recv =
+					(uint16_t)sesc_cfg_rx.body[data_len] |
+					((uint16_t)sesc_cfg_rx.body[data_len + 1u] << 8);
+			const bool ready = calc == recv;
+			if(ready) {
+				return true;
+			}
+			sesc_cfg_rx_reset();
+		}
+		break;
+
+	default:
+		sesc_cfg_rx_reset();
+		break;
+	}
+	return false;
+}
+
+static void sesc_cfg_consume_ready(port_str *port) {
+	sesc_cfg_handle_packet(port);
+	sesc_cfg_rx_reset();
 }
 #endif
 
@@ -572,6 +1084,9 @@ void task_app(void * argument)
 	{
 		while(rd_ptr != uart_get_write_pos(port)) {
 #if defined(G30P) && SESC_SHU_COMPAT
+			if(sesc_cfg_feed_stock_frame(usart_rx_dma_buffer[rd_ptr])) {
+				sesc_cfg_consume_ready(port);
+			}
 			if(shu_feed_stock_frame(usart_rx_dma_buffer[rd_ptr])) {
 				shu_handoff_to_stock_iap();
 			}
