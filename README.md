@@ -4,6 +4,37 @@
 
 ![image](https://user-images.githubusercontent.com/11454444/148704200-e28ee13e-c91b-4aac-8dbf-6021095749a5.png)
 
+
+> ## G30D SHU Coast + Delta + Stock BMS — frozen hardware-test candidate
+>
+> This fork contains a G30D-specific SmartESC build that preserves the stock Ninebot IAP bootloader and is packaged for ScooterHacking Utility (SHU).
+>
+> **Frozen source:** `freeze/g30-shu-coast-delta-bms-2026-09-30`  
+> **Frozen commit:** `b4e7bbb38c9738b0f58bdbd1ff28c61c5d0b279e`
+>
+> Main G30D changes:
+> - stock G30 dashboard remains on PA2 / USART2 half-duplex
+> - throttle and Eco / Drive / Sport support
+> - brake input = motor cut, no regenerative braking
+> - true coast on throttle release
+> - automatic STAR/DELTA control on the former rear-light output
+> - DELTA at >= 32 km/h, STAR at <= 26 km/h
+> - relay change only after low torque/current, PWM off, then 100 ms contact-settle time
+> - stock G30 BMS remains on USART3 (PB10/PB11)
+> - Ninebot BMS activator heartbeat every 200 ms
+> - read-only BMS SOC/current/voltage/temperature/status telemetry
+> - dashboard battery percentage uses BMS SOC when valid
+> - stock 4 KiB IAP bootloader preserved
+> - SHU ZIPv3 package with plain + NinebotTEA encrypted firmware
+> - stationary recovery/revert handoff back to the stock IAP bootloader
+>
+> CI for the frozen candidate is green. The first real-controller test is still required for the complete SHU -> stock/SHFW rollback path and for BMS current-limit behavior. Keep an ST-Link and a verified full 128 KiB ESC flash backup available for the first hardware test.
+>
+> **Project documentation:** [G30D SHU Coast + Delta + Stock BMS](docs/G30D_SHU_COAST_DELTA_BMS.md)  
+> **Frozen branch:** [freeze/g30-shu-coast-delta-bms-2026-09-30](../../tree/freeze/g30-shu-coast-delta-bms-2026-09-30)  
+> **Development PR:** [#2 — G30 SHU Coast + Delta + Stock BMS](../../pull/2)
+
+
 # Overview
 
 Avantage over other Xiaomi custom firmwares :
@@ -29,19 +60,23 @@ You'll be able to setup and control the controller/motor from VESCTool interface
 With any small arduino, use analog acceleration/brake throttles to control any electic moving device like escooter, gokart, electric skateboard without using the stock display.
 
 
-# Download 
+# Download
 
-Download the latest build for M365 : [![Package Control total downloads](https://img.shields.io/github/downloads/Koxx3/SmartESC_STM32_v2/total.svg)](https://github.com/Koxx3/SmartESC_STM32_v2/releases/latest/download/m365.bin)
+For the G30D SHU Coast + Delta + Stock BMS candidate, use the **Build G30 SHU candidate** GitHub Actions workflow/artifact from this fork. The frozen source is pinned above so the tested source revision cannot be confused with later development.
+
+The original upstream M365 release information remains available from the upstream SmartESC project.
 
 
 # Build
 
-Last automatic build status : [![Build on commit](https://github.com/Koxx3/SmartESC_STM32_v2/actions/workflows/build_on_commit.yml/badge.svg)](https://github.com/Koxx3/SmartESC_STM32_v2/actions/workflows/build_on_commit.yml)
+Current fork build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fshu-coast-delta)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+
+G30 SHU candidate workflow: [Build G30 SHU candidate](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_g30_shu.yml)
 
 If you want to build it manually, for an easier build, you need `git` and `docker`.
 
 ## Clone the project
-`git clone https://github.com/Koxx3/SmartESC_STM32_v2.git`
+`git clone https://github.com/ZachWay9bot/SmartESC_STM32_v21b.git`
 
 ## Build on Linux
 Launch from terminal:
