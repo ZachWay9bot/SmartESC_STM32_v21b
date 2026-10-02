@@ -1,5 +1,9 @@
 # G30D SHU Coast + Delta + Stock BMS
 
+> **Historical baseline:** this document describes the pre-config v1 freeze.  
+> The current hardware-test candidate is **G30D SmartESC Config v0.2**:
+> [G30D_SMARTESC_CONFIG_V0_2.md](G30D_SMARTESC_CONFIG_V0_2.md).
+>
 Status: **frozen hardware-test candidate**
 
 Frozen source branch:
