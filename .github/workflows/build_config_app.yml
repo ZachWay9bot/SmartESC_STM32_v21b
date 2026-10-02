@@ -33,6 +33,9 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Test protocol
+        run: gradle -p android/SmartESCConfig :app:testDebugUnitTest --no-daemon
+
       - name: Build debug APK
         run: gradle -p android/SmartESCConfig :app:assembleDebug --no-daemon
 
