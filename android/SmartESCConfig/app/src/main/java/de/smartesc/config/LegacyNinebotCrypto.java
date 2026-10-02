@@ -76,7 +76,7 @@ public final class LegacyNinebotCrypto {
     }
 
     public synchronized byte[] decrypt(byte[] encrypted) {
-        if (encrypted == null || encrypted.length < 15) return null;
+        if (encrypted == null || encrypted.length < 13) return null;
 
         long rx16 = ((long)(encrypted[encrypted.length-2] & 0xFF) << 8)
                 | (long)(encrypted[encrypted.length-1] & 0xFF);
