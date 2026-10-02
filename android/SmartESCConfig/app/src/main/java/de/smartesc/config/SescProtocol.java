@@ -41,6 +41,37 @@ public final class SescProtocol {
         return buildFrame(0x3E, 0x20, CMD_CONFIG, arg, payload);
     }
 
+    /**
+     * NinebotCrypto encrypts the checksum-free inner packet. The BLE crypto
+     * envelope provides its own CRC/MIC and counter. The dashboard reconstructs
+     * the normal UART checksum when forwarding the command to the ESC.
+     */
+    public static byte[] buildBleInner(int src, int dst, int cmd, int arg, byte[] payload) {
+        if (payload == null) payload = new byte[0];
+        byte[] out = new byte[payload.length + 7];
+        out[0] = 0x5A;
+        out[1] = (byte)0xA5;
+        out[2] = (byte)payload.length;
+        out[3] = (byte)src;
+        out[4] = (byte)dst;
+        out[5] = (byte)cmd;
+        out[6] = (byte)arg;
+        System.arraycopy(payload,0,out,7,payload.length);
+        return out;
+    }
+
+    public static byte[] buildConfigBleInner(int arg, byte[] payload) {
+        return buildBleInner(0x3E,0x20,CMD_CONFIG,arg,payload);
+    }
+
+    public static Frame parseBleInner(byte[] raw) {
+        if (raw == null || raw.length < 7 || u8(raw[0]) != 0x5A || u8(raw[1]) != 0xA5) return null;
+        int len = u8(raw[2]);
+        if (raw.length != len + 7) return null;
+        return new Frame(u8(raw[3]),u8(raw[4]),u8(raw[5]),u8(raw[6]),
+                Arrays.copyOfRange(raw,7,7+len));
+    }
+
     public static Frame parse(byte[] raw) {
         if (raw == null || raw.length < 9 || u8(raw[0]) != 0x5A || u8(raw[1]) != 0xA5) return null;
         int len = u8(raw[2]);
