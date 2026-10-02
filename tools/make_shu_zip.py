@@ -146,7 +146,7 @@ def main() -> int:
     ap.add_argument("output", type=Path, help="output SHU ZIP")
     ap.add_argument(
         "--name",
-        default="SmartESC G30 SHU Coast+Delta+BMS",
+        default="SmartESC G30 SHU Config+DualProfile",
         help="displayName stored in info.json",
     )
     args = ap.parse_args()
@@ -172,13 +172,15 @@ def main() -> int:
     }
 
     notes = (
-        "SmartESC G30 SHU candidate\n"
+        "SmartESC G30 SHU Config + dual STAR/DELTA profile candidate\n"
         "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
         "Throttle release: coast\n"
         "Brake: motor cut, no regenerative braking\n"
         "STAR/DELTA: rear-light output, DELTA >= 32 km/h, STAR <= 26 km/h\n"
         "Relay switching: wait for |Iq| <= 2 A, then 100 ms settle\n"
         "Stock BMS: USART3 heartbeat/activator every 200 ms + read-only telemetry\n"
+        "Config: companion-app protocol 0x7D; STAR/DELTA R/L/flux/current profiles\n"
+        "Motor setup: R/L + flux + Hall detect, with DELTA Hall verification\n"
         f"Image size: {len(plain)} bytes\n"
         f"Initial SP: 0x{sp:08X}\n"
         f"Reset handler: 0x{reset:08X}\n"
