@@ -40,6 +40,9 @@ void task_LED_set_brake_light(en_brake mode);
 /* G30 STAR/DELTA helper state. On non-G30 targets these return false. */
 bool task_delta_coast_required(void);
 bool task_delta_is_active(void);
+bool task_delta_setup_force(bool delta);
+void task_delta_setup_release(void);
+bool task_delta_setup_active(void);
 
 
 
