@@ -76,6 +76,37 @@ def test_bms_activator_source() -> None:
     assert checksum16(activation_body) == 0xFF87
 
 
+def test_g30_config_protocol() -> None:
+    app_uart = ROOT / "common_files" / "src" / "app_uartcomm.c"
+    conf_h = ROOT / "common_files" / "src" / "conf_general.h"
+    conf_c = ROOT / "common_files" / "src" / "conf_general.c"
+    delta = ROOT / "common_files" / "src" / "task_LED.c"
+
+    require_text(conf_h, "G30_CONFIG_MAGIC")
+    require_text(conf_h, "g30_foc_profile_t")
+    require_text(conf_h, "G30_CFG_FLAG_STAR_VALID")
+    require_text(conf_h, "G30_CFG_FLAG_DELTA_VALID")
+    require_text(conf_h, "G30_CFG_FLAG_AUTO_DELTA")
+
+    require_text(conf_c, "G30_CONFIG_FLASH_ADDR")
+    require_text(conf_c, "_Static_assert(sizeof(app_configuration) + sizeof(g30_sesc_config_t) <= PAGE_SIZE")
+    require_text(conf_c, "g30_config_apply_runtime_profile")
+    require_text(conf_c, "PIDIqHandle_M1.wIntegralTerm = 0")
+    require_text(conf_c, "PIDIdHandle_M1.wIntegralTerm = 0")
+
+    require_text(app_uart, "#define SESC_CFG_CMD                 0x7Du")
+    require_text(app_uart, "SESC_CFG_DETECT")
+    require_text(app_uart, "tune_foc_measure_r_l_imax")
+    require_text(app_uart, "tune_foc_measure_flux_linkage_openloop")
+    require_text(app_uart, "tune_mcpwm_foc_hall_detect")
+    require_text(app_uart, "sesc_detect_restore_original")
+    require_text(app_uart, "(delta && !g30_config_profile_valid(false))")
+
+    require_text(delta, "g30_config_auto_delta_enabled()")
+    require_text(delta, "g30_config_apply_runtime_profile(delta_target)")
+    require_text(delta, "cfg->relay_settle_ms")
+
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -150,6 +181,7 @@ def test_ninebottea_and_zip() -> None:
 def main() -> int:
     test_layout()
     test_bms_activator_source()
+    test_g30_config_protocol()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")
