@@ -37,28 +37,54 @@
 
 # Overview
 
-Avantage over other Xiaomi custom firmwares :
-- you can put any motor since it can detect all motor parameters and optimize them
-- you can use any battery, even 20s (with hardware modifications), change the voltage divider and set the new value in the controller
-- you can change the shunts values and set the new value in the controller
-- you can setup the controller very easily with VESCTool and make a lot of performance/stability tests
-- you can use the controller with any other device, event without any display
-- soon, we hope to support multiple linked controller
+## This fork: G30D SHU build
 
-Cons :
-- you loose the ability to monitor M365 BMS for now (work in progress), but don't worry, you still have the voltage ;)
-- you loose the ability to update firmwares through bluetooth
-- for now, it needs hall sensors (no sensorless mode). [work in progress]
+The G30D build in this fork is intentionally different from the original upstream SmartESC firmware.
 
-It can interface :
-- the stock M365/G30 display
-- VESCTool through VESC interface on the BMS UART (full duplex UART).
+### What is retained / supported
 
-Nota : this firmware is in beta. 
+- stock G30 dashboard on the original yellow 1-wire line (PA2 / USART2)
+- throttle, speed display and Eco / Drive / Sport
+- brake input as **motor cut / coast**, with no regenerative braking
+- true coast when throttle is released
+- stock G30 BMS communication on USART3 (PB10/PB11)
+- BMS activator heartbeat plus read-only SOC/current/voltage/temperature/status telemetry
+- dashboard battery percentage from real BMS SOC when available
+- automatic STAR/DELTA control using the former rear-light output
+- stock 4 KiB Ninebot IAP bootloader preserved
+- SHU-compatible ZIPv3 package with plain and NinebotTEA-encrypted firmware
+- stationary handoff back to the preserved stock IAP bootloader for future SHU flashing / revert
 
-You'll be able to setup and control the controller/motor from VESCTool interface with a simple USB/Serial adapter.
-With any small arduino, use analog acceleration/brake throttles to control any electic moving device like escooter, gokart, electric skateboard without using the stock display.
+### Bluetooth / SHU firmware updates
 
+The original upstream SmartESC normally overwrites the stock application/boot layout and therefore loses the normal Ninebot Bluetooth firmware-update path.
+
+**That statement does not apply to this G30D SHU build.**
+
+This fork relocates SmartESC to `0x08001000` and deliberately preserves the stock Ninebot IAP bootloader at `0x08000000..0x08000FFF`. The firmware contains a SHU update handoff so a firmware update initiated through ScooterHacking Utility can reboot into the preserved stock IAP bootloader.
+
+So the intended G30D workflow is:
+
+```
+SHU / Bluetooth
+      ↓
+SmartESC G30D
+      ↓
+preserved stock IAP bootloader
+      ↓
+new SmartESC / stock / SHFW DRV
+```
+
+The packaging and handoff code are implemented and CI-tested. The complete **SmartESC -> SHU -> stock/SHFW** rollback path still needs the first real-controller hardware validation, so keep ST-Link recovery available for that first test.
+
+### Current limitations
+
+- Hall sensors are still required; there is no sensorless mode in this build.
+- The first real-controller validation of SHU revert and the BMS no-communication current-limit behavior is still pending.
+- The compact SHU build uses `SESC_SHU_LITE`; VESC Tool support and some nonessential extras are disabled to stay inside the stock 52 KiB application window.
+- The old upstream M365 BMS limitation applies to M365 support, not to the G30D stock-BMS integration described above.
+
+For the exact frozen G30D behavior and memory layout, see [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
 
 # Download
 
@@ -95,19 +121,29 @@ Double click :
 
 # Programming
 
-You need a ST-Link device to reprogram the M365/G3O controller.
-It costs 3/4€ on Aliexpress.
+## G30D SHU build
 
-Plug the st-link following this schematic :
+The intended install/update path for the frozen G30D build is **ScooterHacking Utility (SHU) over Bluetooth**.
+
+For the **first hardware test only**, keep an ST-Link connected or immediately available and save a complete 128 KiB flash backup before flashing. This is the recovery path while the new SHU handoff is being validated on real hardware.
+
+A working SHU package is produced by the **Build G30 SHU candidate** workflow.
+
+## ST-Link recovery / original upstream programming
+
+ST-Link is still useful for recovery, full-flash backups and original upstream/M365 flashing.
+
+Plug the ST-Link following this schematic:
+
 ![image](https://user-images.githubusercontent.com/11454444/146688635-b5a1ed07-3482-420f-b324-9e58b0a19dc9.png)
 
-With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link004.html), disable Re&d out protection.
-
-Menu "Target" => "Option bytes"
-![image](https://user-images.githubusercontent.com/11454444/146688019-3e5122c7-f3fb-4964-a44f-684af023746e.png)
-
+With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link004.html), the option bytes/read protection can be inspected when required.
 
 # VescTool
+
+The frozen **G30D SHU** candidate uses `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so VESC Tool support is intentionally disabled in that compact build.
+
+The information below applies to the original/full SmartESC builds that include the VESC interface.
 
 Use [VescTool](https://vesc-project.com/vesc_tool) to setup the motor and input properties.
 
