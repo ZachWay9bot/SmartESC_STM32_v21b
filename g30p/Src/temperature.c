@@ -72,7 +72,7 @@ int32_t GetTemperatureSensorData(TEMPERATURE_SENSOR_DATA* temperature_sensor_dat
 {
 	int32_t deltaT, maxT = 0;
 	uint8_t mosfet, index;
-	int32_t mosfet_on_time[6];
+	int32_t mosfet_on_time[6] = {0};
 	int32_t total_power = (float)pMPM[M1]->_super.hAvrgElMotorPowerW/(float)VBS_GetAvBusVoltage_V(pMCT[M1]->pBusVoltageSensor);
 	int32_t motor_rpm = ((int32_t)pMCI[M1]->pSTC->SPD->open_speed);
 
