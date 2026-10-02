@@ -123,7 +123,11 @@ public final class NinebotBleClient {
             listener.onStatus("Noch nicht verbunden/authentifiziert");
             return;
         }
-        sendNinebot(SescProtocol.buildConfig(arg,payload));
+        if (encryptedMode) {
+            queueBytes(crypto.encrypt(SescProtocol.buildConfigBleInner(arg,payload)));
+        } else {
+            queueBytes(SescProtocol.buildConfig(arg,payload));
+        }
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
@@ -201,12 +205,8 @@ public final class NinebotBleClient {
     }
 
     private void sendEncryptedPair(int cmd,int arg,byte[] payload) {
-        byte[] p = SescProtocol.buildFrame(0x3E,0x21,cmd,arg,payload);
+        byte[] p = SescProtocol.buildBleInner(0x3E,0x21,cmd,arg,payload);
         queueBytes(crypto.encrypt(p));
-    }
-
-    private void sendNinebot(byte[] plain) {
-        queueBytes(encryptedMode ? crypto.encrypt(plain) : plain);
     }
 
     private void schedule5c() {
@@ -236,7 +236,9 @@ public final class NinebotBleClient {
                 }
                 if (b.length < 3) return;
                 int len = b[2] & 0xFF;
-                int total = len + (encryptedMode ? 15 : 9);
+                // NinebotCrypto wire overhead is 13 bytes total over payload:
+                // 5A A5 LEN + encrypted inner + 4-byte MIC/CRC + 2-byte counter.
+                int total = len + (encryptedMode ? 13 : 9);
                 if (total < 9 || total > 270) {
                     rxBuffer.reset();
                     return;
@@ -259,7 +261,9 @@ public final class NinebotBleClient {
 
     private void handleMessage(byte[] wire) {
         byte[] plain = encryptedMode ? crypto.decrypt(wire) : wire;
-        SescProtocol.Frame f = SescProtocol.parse(plain);
+        SescProtocol.Frame f = encryptedMode ?
+                SescProtocol.parseBleInner(plain) :
+                SescProtocol.parse(plain);
         if (f == null) return;
 
         if (!ready && encryptedMode && f.src == 0x21 && f.dst == 0x3E) {
