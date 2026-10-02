@@ -5,35 +5,49 @@
 ![image](https://user-images.githubusercontent.com/11454444/148704200-e28ee13e-c91b-4aac-8dbf-6021095749a5.png)
 
 
-> ## G30D SHU Coast + Delta + Stock BMS — frozen hardware-test candidate
+> ## G30D SmartESC Config v0.2 — current hardware-test candidate
 >
-> This fork contains a G30D-specific SmartESC build that preserves the stock Ninebot IAP bootloader and is packaged for ScooterHacking Utility (SHU).
+> This fork contains a G30D-specific SmartESC build with SHU flashing/recovery, stock dashboard + BMS support, true coast/no-regen, automatic STAR/DELTA switching and a dedicated Android configuration app.
 >
-> **Frozen source:** `freeze/g30-shu-coast-delta-bms-2026-09-30`  
-> **Frozen commit:** `b4e7bbb38c9738b0f58bdbd1ff28c61c5d0b279e`
+> **Candidate branch:** `candidate/g30-config-app-v0.2`  
+> **Candidate commit:** `f7c22f4859ef28fa3ce29499b5d79cd8aa3267df`
 >
-> Main G30D changes:
-> - stock G30 dashboard remains on PA2 / USART2 half-duplex
-> - throttle and Eco / Drive / Sport support
-> - brake input = motor cut, no regenerative braking
+> Current v0.2 feature set:
+> - stock G30 dashboard on PA2 / USART2 half-duplex
+> - throttle, speed display and Eco / Drive / Sport
+> - brake input = motor cut; no regenerative braking
 > - true coast on throttle release
-> - automatic STAR/DELTA control on the former rear-light output
-> - DELTA at >= 32 km/h, STAR at <= 26 km/h
-> - relay change only after low torque/current, PWM off, then 100 ms contact-settle time
-> - stock G30 BMS remains on USART3 (PB10/PB11)
-> - Ninebot BMS activator heartbeat every 200 ms
-> - read-only BMS SOC/current/voltage/temperature/status telemetry
-> - dashboard battery percentage uses BMS SOC when valid
-> - stock 4 KiB IAP bootloader preserved
-> - SHU ZIPv3 package with plain + NinebotTEA encrypted firmware
-> - stationary recovery/revert handoff back to the stock IAP bootloader
+> - stock G30 BMS on USART3 (PB10/PB11)
+> - BMS activator heartbeat + SOC/current/voltage/temperature/status telemetry
+> - dashboard battery percentage from BMS SOC when valid
+> - automatic STAR/DELTA using the former rear-light output
+> - configurable DELTA/STAR thresholds, max switch Iq and relay settle time
+> - separate STAR and DELTA R/L/flux/current profiles
+> - VESC-style motor setup: R/L measurement, open-loop flux measurement and Hall detection
+> - DELTA setup only after a valid STAR profile; Hall result is cross-checked
+> - profile swap while PWM is off; FOC Kp/Ki is recalculated per topology
+> - stock 4 KiB Ninebot IAP bootloader preserved
+> - SHU ZIPv3 package with plain + NinebotTEA-encrypted firmware
+> - dedicated Android **SmartESC Config** app instead of the SHFW-only SHU Config UI
+> - Android BLE transport includes legacy NinebotCrypto 5B/5C/5D authentication
 >
-> CI for the frozen candidate is green. The first real-controller test is still required for the complete SHU -> stock/SHFW rollback path and for BMS current-limit behavior. Keep an ST-Link and a verified full 128 KiB ESC flash backup available for the first hardware test.
+> Current CI for the candidate commit is green:
+> - **Build G30 SHU candidate #36:** success
+> - **Build on commit #69:** success
+> - **Build SmartESC Config APK #23:** success
+> - Android protocol/NinebotCrypto unit tests: success
+> - G30 firmware: **0 errors / 0 warnings**
+> - `g30p.bin`: **48,864 bytes** inside the stock 52 KiB application window
 >
-> **Project documentation:** [G30D SHU Coast + Delta + Stock BMS](docs/G30D_SHU_COAST_DELTA_BMS.md)  
-> **Frozen branch:** [freeze/g30-shu-coast-delta-bms-2026-09-30](../../tree/freeze/g30-shu-coast-delta-bms-2026-09-30)  
-> **Development PR:** [#2 — G30 SHU Coast + Delta + Stock BMS](../../pull/2)
-
+> **Important:** this is a hardware-test candidate. The code/build/package path is validated, but real G30D validation is still required for BLE forwarding of the private config protocol, motor detection in both topologies, relay switching under load, BMS current-limit behavior and SHU → stock/SHFW rollback. Keep ST-Link and a verified 128 KiB full-flash backup available for the first test.
+>
+> **Candidate branch:** [candidate/g30-config-app-v0.2](../../tree/candidate/g30-config-app-v0.2)  
+> **Candidate PR:** [#3 — G30 SmartESC Config v0.2](../../pull/3)  
+> **v0.2 documentation:** [docs/G30D_SMARTESC_CONFIG_V0_2.md](docs/G30D_SMARTESC_CONFIG_V0_2.md)  
+> **Android source:** [android/SmartESCConfig on the candidate branch](../../tree/candidate/g30-config-app-v0.2/android/SmartESCConfig)
+>
+> The older pre-config freeze remains available for reference:
+> [freeze/g30-shu-coast-delta-bms-2026-09-30](../../tree/freeze/g30-shu-coast-delta-bms-2026-09-30)
 
 # Overview
 
@@ -81,21 +95,37 @@ The packaging and handoff code are implemented and CI-tested. The complete **Sma
 
 - Hall sensors are still required; there is no sensorless mode in this build.
 - The first real-controller validation of SHU revert and the BMS no-communication current-limit behavior is still pending.
-- The compact SHU build uses `SESC_SHU_LITE`; VESC Tool support and some nonessential extras are disabled to stay inside the stock 52 KiB application window.
+- The compact SHU build uses `SESC_SHU_LITE`; the full VESC Tool stack is disabled to stay inside the stock 52 KiB application window.
+- Motor/current setup for this G30D build is handled by the dedicated **SmartESC Config** Android app.
 - The old upstream M365 BMS limitation applies to M365 support, not to the G30D stock-BMS integration described above.
 
-For the exact frozen G30D behavior and memory layout, see [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
+For the current v0.2 motor/configuration workflow, see [docs/G30D_SMARTESC_CONFIG_V0_2.md](docs/G30D_SMARTESC_CONFIG_V0_2.md). The older frozen base is documented in [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
 
 # Download
 
-For the G30D SHU Coast + Delta + Stock BMS candidate, use the **Build G30 SHU candidate** GitHub Actions workflow/artifact from this fork. The frozen source is pinned above so the tested source revision cannot be confused with later development.
+The current G30D hardware-test candidate is pinned to:
+
+```
+branch: candidate/g30-config-app-v0.2
+commit: f7c22f4859ef28fa3ce29499b5d79cd8aa3267df
+```
+
+GitHub Actions artifacts for that exact commit:
+
+- firmware: **SmartESC-G30-Config-SHU-36**
+- Android app: **SmartESC-Config-Android-23**
+- full build/regression: **Build on commit #69**
+
+Use PR #3 and the candidate branch links above to avoid accidentally testing a later development commit.
 
 The original upstream M365 release information remains available from the upstream SmartESC project.
 
 
 # Build
 
-Current fork build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fshu-coast-delta)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+Current development build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fg30-config-app)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+
+Android app workflow: [Build SmartESC Config APK](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_config_app.yml)
 
 G30 SHU candidate workflow: [Build G30 SHU candidate](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_g30_shu.yml)
 
@@ -123,11 +153,11 @@ Double click :
 
 ## G30D SHU build
 
-The intended install/update path for the frozen G30D build is **ScooterHacking Utility (SHU) over Bluetooth**.
+The intended install/update path for the G30D candidate is **ScooterHacking Utility (SHU) over Bluetooth**. Configuration and motor setup are then performed with the dedicated **SmartESC Config** Android app.
 
-For the **first hardware test only**, keep an ST-Link connected or immediately available and save a complete 128 KiB flash backup before flashing. This is the recovery path while the new SHU handoff is being validated on real hardware.
+For the **first hardware test**, keep an ST-Link connected or immediately available and save a complete 128 KiB flash backup before flashing. This remains the recovery path while the SHU handoff and BLE configuration path are being validated on real hardware.
 
-A working SHU package is produced by the **Build G30 SHU candidate** workflow.
+A SHU package is produced by the **Build G30 SHU candidate** workflow and the APK by **Build SmartESC Config APK**.
 
 ## ST-Link recovery / original upstream programming
 
@@ -141,9 +171,11 @@ With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link00
 
 # VescTool
 
-The frozen **G30D SHU** candidate uses `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so VESC Tool support is intentionally disabled in that compact build.
+The **G30D SHU v0.2** candidate uses `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so the full VESC Tool stack is intentionally disabled.
 
-The information below applies to the original/full SmartESC builds that include the VESC interface.
+For this G30D build, the replacement setup path is the dedicated **SmartESC Config** Android app. It provides current limits, live telemetry, persistent configuration, STAR/DELTA profiles and the R/L/flux/Hall motor-detection workflow.
+
+The information below applies only to the original/full SmartESC builds that include the VESC interface.
 
 Use [VescTool](https://vesc-project.com/vesc_tool) to setup the motor and input properties.
 
