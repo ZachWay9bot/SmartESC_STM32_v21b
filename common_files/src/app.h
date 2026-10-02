@@ -39,4 +39,9 @@ void app_adc_set_adc(uint8_t AD1, uint8_t AD2);
 void app_timer_update_period();
 void app_adc_init_timer();
 void app_check_timer();
+
+#if defined(G30P) && SESC_SHU_COMPAT
+bool app_shu_invalidate_app_vector(void);
+#endif
+
 #endif /* APP_H_ */

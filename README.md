@@ -35,6 +35,32 @@
 > **Development PR:** [#2 — G30 SHU Coast + Delta + Stock BMS](../../pull/2)
 
 
+## Current development: SmartESC Config app + dual STAR/DELTA profiles
+
+The next G30D candidate is developed on `feature/g30-config-app` in [PR #3](../../pull/3).
+
+Because SHU exposes its configuration UI only for SHFW, this branch adds a dedicated Android companion app instead of restoring the full VESC Tool stack to the 52 KiB SHU image.
+
+The current candidate adds:
+
+- Android **SmartESC Config** companion app over the stock G30 BLE/dashboard path
+- lightweight SmartESC command protocol (`CMD 0x7D`)
+- live speed, bus voltage, Iq, battery input current, SOC, BMS state and STAR/DELTA state
+- RAM-first configuration with explicit persistent save
+- configurable battery current, wheel size, pole count and relay switching thresholds
+- independent STAR and DELTA electrical profiles
+- automatic R/L, flux and Hall detection for STAR
+- safe PWM-off relay change followed by DELTA R/L and flux detection
+- DELTA Hall verification against the STAR Hall table
+- automatic STAR/DELTA disabled until both profiles are valid
+- failed motor setup restores the previous controller configuration
+
+The companion app intentionally does **not** impersonate SHFW. SHU remains responsible for firmware flashing/recovery; SmartESC Config handles setup and telemetry.
+
+Android source and build instructions: [android/SmartESCConfig](android/SmartESCConfig)
+
+
+
 # Overview
 
 ## This fork: G30D SHU build
@@ -81,21 +107,23 @@ The packaging and handoff code are implemented and CI-tested. The complete **Sma
 
 - Hall sensors are still required; there is no sensorless mode in this build.
 - The first real-controller validation of SHU revert and the BMS no-communication current-limit behavior is still pending.
-- The compact SHU build uses `SESC_SHU_LITE`; VESC Tool support and some nonessential extras are disabled to stay inside the stock 52 KiB application window.
+- The compact SHU build uses `SESC_SHU_LITE`; the full VESC Tool stack remains disabled to stay inside the stock 52 KiB application window. The SmartESC Config companion app provides the G30D motor/current setup path instead.
 - The old upstream M365 BMS limitation applies to M365 support, not to the G30D stock-BMS integration described above.
 
 For the exact frozen G30D behavior and memory layout, see [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
 
 # Download
 
-For the G30D SHU Coast + Delta + Stock BMS candidate, use the **Build G30 SHU candidate** GitHub Actions workflow/artifact from this fork. The frozen source is pinned above so the tested source revision cannot be confused with later development.
+For the frozen G30D SHU Coast + Delta + Stock BMS candidate, use the **Build G30 SHU candidate** workflow/artifact. For the current Config + dual-profile candidate, use the artifacts from PR #3: the SHU ZIP and the Android APK.
 
 The original upstream M365 release information remains available from the upstream SmartESC project.
 
 
 # Build
 
-Current fork build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fshu-coast-delta)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+Current Config branch build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fg30-config-app)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+
+Android app workflow: [Build SmartESC Config APK](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_config_app.yml)
 
 G30 SHU candidate workflow: [Build G30 SHU candidate](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_g30_shu.yml)
 
@@ -141,7 +169,7 @@ With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link00
 
 # VescTool
 
-The frozen **G30D SHU** candidate uses `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so VESC Tool support is intentionally disabled in that compact build.
+The **G30D SHU** candidates use `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so the full VESC Tool stack is intentionally disabled. The current `feature/g30-config-app` build uses the dedicated SmartESC Config Android app for motor detection, current limits and STAR/DELTA profiles.
 
 The information below applies to the original/full SmartESC builds that include the VESC interface.
 

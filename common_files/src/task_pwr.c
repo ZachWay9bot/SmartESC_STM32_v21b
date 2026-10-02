@@ -28,6 +28,7 @@
 #include "task.h"
 #include "task_cli.h"
 #include <string.h>
+#include <math.h>
 #include "VescCommand.h"
 #include "music.h"
 #include "ninebot.h"
@@ -133,11 +134,13 @@ void task_PWR(void *argument) {
 			  case NO_PRESS : break ;
 			  case SINGLE_PRESS : {
 				  m365_to_display.light = !m365_to_display.light;
+#ifndef G30P
 				  if(m365_to_display.light){
 					  task_LED_set_brake_light(BRAKE_LIGHT_ON);
 				  }else{
 					  task_LED_set_brake_light(BRAKE_LIGHT_OFF);
 				  }
+#endif
 
 			  } break ;
 			  case LONG_PRESS :   {
@@ -145,7 +148,23 @@ void task_PWR(void *argument) {
 
 			  } break ;
 			  case VERY_LONG_PRESS :   {
-
+#if defined(G30P) && SESC_SHU_COMPAT
+				  /*
+				   * Manual recovery path. Once the scooter is stationary and Iq has
+				   * collapsed, deliberately invalidate only the application's initial
+				   * stack-pointer word. On reset the preserved stock bootloader sees
+				   * an invalid app and remains available for a recovery flash.
+				   */
+				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
+					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
+					  HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+					  VescToSTM_pwm_stop();
+					  if(app_shu_invalidate_app_vector()) {
+						  __disable_irq();
+						  NVIC_SystemReset();
+					  }
+				  }
+#endif
 			  } break ;
 			  case DOUBLE_PRESS : {
 				  uint32_t kmh=0;

@@ -42,11 +42,19 @@
 mc_configuration mc_conf;
 app_configuration appconf;
 
+#ifdef G30P
+static g30_sesc_config_t g30_cfg;
+static bool g30_config_program_tail(void);
+#endif
+
 void conf_general_init(void) {
 	conf_general_read_app_configuration(&appconf);
 	app_set_configuration(&appconf);
 
 	conf_general_read_mc_configuration(&mc_conf, 0);
+#ifdef G30P
+	g30_config_init();
+#endif
 	conf_general_setup_mc(&mc_conf);
 
 	//enable cycle counter
@@ -205,6 +213,11 @@ bool conf_general_store_app_configuration(app_configuration *conf) {
 
 
 	is_ok = conf_general_write_flash(APP_PAGE, (uint8_t*)conf, sizeof(app_configuration));
+#ifdef G30P
+	if(is_ok) {
+		is_ok = g30_config_program_tail();
+	}
+#endif
 
 	vTaskDelay(500);
 	MCI_ExecTorqueRamp(pMCI[M1], 0, 0);
@@ -463,6 +476,261 @@ void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float t
 	mcconf->foc_current_ki = ki;
 	mcconf->foc_observer_gain = gain * 1e6;
 }
+
+
+#ifdef G30P
+
+#define G30_CONFIG_FLASH_ADDR (ADDR_FLASH_PAGE_126 + PAGE_SIZE - sizeof(g30_sesc_config_t))
+_Static_assert(sizeof(app_configuration) + sizeof(g30_sesc_config_t) <= PAGE_SIZE,
+		"G30 config does not fit in APP flash page");
+
+static uint16_t g30_config_crc(const g30_sesc_config_t *cfg) {
+	g30_sesc_config_t tmp = *cfg;
+	tmp.crc = 0;
+	return crc16((uint8_t*)&tmp, sizeof(tmp));
+}
+
+static void g30_config_defaults(void) {
+	memset(&g30_cfg, 0, sizeof(g30_cfg));
+	g30_cfg.magic = G30_CONFIG_MAGIC;
+	g30_cfg.version = G30_CONFIG_VERSION;
+	g30_cfg.size = sizeof(g30_cfg);
+
+	g30_cfg.star.r_ohm = mc_conf.foc_motor_r;
+	g30_cfg.star.l_h = mc_conf.foc_motor_l;
+	g30_cfg.star.flux_wb = mc_conf.foc_motor_flux_linkage;
+	g30_cfg.star.phase_current_max_a = mc_conf.l_current_max;
+	g30_cfg.delta = g30_cfg.star;
+
+	g30_cfg.battery_current_max_a = mc_conf.l_in_current_max;
+	g30_cfg.delta_enter_kmh = DELTA_ENTER_SPEED_KMH;
+	g30_cfg.delta_exit_kmh = DELTA_EXIT_SPEED_KMH;
+	g30_cfg.switch_iq_a = DELTA_SWITCH_MAX_IQ_A;
+	g30_cfg.relay_settle_ms = DELTA_RELAY_SETTLE_MS;
+	g30_cfg.wheel_diameter_m = mc_conf.si_wheel_diameter;
+	g30_cfg.motor_poles = (uint8_t)mc_conf.si_motor_poles;
+	memcpy(g30_cfg.hall_table, mc_conf.foc_hall_table, sizeof(g30_cfg.hall_table));
+
+	/*
+	 * Generic fallback values are intentionally not marked as detected.
+	 * Automatic STAR/DELTA remains disabled until both profiles have been
+	 * measured or explicitly configured by the companion app.
+	 */
+	g30_cfg.flags = 0;
+	g30_cfg.crc = g30_config_crc(&g30_cfg);
+}
+
+static void g30_config_copy_profile_to_mc(bool delta) {
+	const g30_foc_profile_t *p = delta ? &g30_cfg.delta : &g30_cfg.star;
+
+	mc_conf.foc_motor_r = p->r_ohm;
+	mc_conf.foc_motor_l = p->l_h;
+	mc_conf.foc_motor_flux_linkage = p->flux_wb;
+	mc_conf.l_current_max = p->phase_current_max_a;
+	mc_conf.l_current_min = -p->phase_current_max_a;
+	mc_conf.l_in_current_max = g30_cfg.battery_current_max_a;
+
+	if(g30_cfg.wheel_diameter_m > 0.05f && g30_cfg.wheel_diameter_m < 1.0f) {
+		mc_conf.si_wheel_diameter = g30_cfg.wheel_diameter_m;
+	}
+	if(g30_cfg.motor_poles >= 2u && g30_cfg.motor_poles <= 60u) {
+		mc_conf.si_motor_poles = g30_cfg.motor_poles;
+	}
+
+	memcpy(mc_conf.foc_hall_table, g30_cfg.hall_table, sizeof(g30_cfg.hall_table));
+	conf_general_calc_apply_foc_cc_kp_ki_gain(&mc_conf, 1000.0f);
+	conf_general_mcconf_hw_limits(&mc_conf);
+}
+
+void g30_config_init(void) {
+	const g30_sesc_config_t *stored =
+			(const g30_sesc_config_t*)G30_CONFIG_FLASH_ADDR;
+	g30_sesc_config_t tmp;
+	memcpy(&tmp, stored, sizeof(tmp));
+
+	const bool valid =
+			tmp.magic == G30_CONFIG_MAGIC &&
+			tmp.version == G30_CONFIG_VERSION &&
+			tmp.size == sizeof(tmp) &&
+			tmp.crc == g30_config_crc(&tmp);
+
+	if(valid) {
+		g30_cfg = tmp;
+	} else {
+		g30_config_defaults();
+	}
+
+	/* Boot is always STAR, so preload the STAR electrical profile. */
+	g30_config_copy_profile_to_mc(false);
+}
+
+const g30_sesc_config_t *g30_config_get(void) {
+	return &g30_cfg;
+}
+
+static bool g30_config_program_tail(void) {
+	g30_cfg.magic = G30_CONFIG_MAGIC;
+	g30_cfg.version = G30_CONFIG_VERSION;
+	g30_cfg.size = sizeof(g30_cfg);
+	g30_cfg.crc = g30_config_crc(&g30_cfg);
+
+	if(HAL_FLASH_Unlock() != HAL_OK) {
+		return false;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
+
+	const uint8_t *src = (const uint8_t*)&g30_cfg;
+	for(uint32_t i = 0; i < sizeof(g30_cfg); i += 4u) {
+		uint32_t word = 0xFFFFFFFFu;
+		const uint32_t remaining = sizeof(g30_cfg) - i;
+		const uint32_t n = remaining >= 4u ? 4u : remaining;
+		memcpy(&word, &src[i], n);
+
+		if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+				G30_CONFIG_FLASH_ADDR + i, word) != HAL_OK) {
+			HAL_FLASH_Lock();
+			return false;
+		}
+	}
+
+	HAL_FLASH_Lock();
+	return true;
+}
+
+bool g30_config_store(void) {
+	/*
+	 * APP_PAGE also contains app_configuration. Erase it once, restore the
+	 * normal app configuration first and then append our compact G30 config
+	 * at the end of the same 1 KiB page.
+	 */
+	VescToSTM_stop_motor();
+	vTaskDelay(MS_TO_TICKS(100));
+
+	appconf.crc = app_calc_crc(&appconf);
+	bool ok = conf_general_write_flash(APP_PAGE,
+			(uint8_t*)&appconf, sizeof(app_configuration));
+	if(ok) {
+		ok = g30_config_program_tail();
+	}
+
+	vTaskDelay(MS_TO_TICKS(100));
+	MCI_ExecTorqueRamp(pMCI[M1], 0, 0);
+	VescToSTM_start_motor();
+	return ok;
+}
+
+bool g30_config_set_profile(bool delta, const g30_foc_profile_t *profile) {
+	if(profile == NULL ||
+	   profile->r_ohm <= 0.00001f || profile->r_ohm > 2.0f ||
+	   profile->l_h <= 0.000001f || profile->l_h > 0.02f ||
+	   profile->flux_wb <= 0.00001f || profile->flux_wb > 1.0f ||
+	   profile->phase_current_max_a < 1.0f || profile->phase_current_max_a > 70.0f) {
+		return false;
+	}
+
+	if(delta) {
+		g30_cfg.delta = *profile;
+		g30_cfg.flags |= G30_CFG_FLAG_DELTA_VALID;
+	} else {
+		g30_cfg.star = *profile;
+		g30_cfg.flags |= G30_CFG_FLAG_STAR_VALID;
+	}
+	return true;
+}
+
+bool g30_config_set_common(float battery_current_max_a, float wheel_diameter_m,
+		uint8_t motor_poles, float delta_enter_kmh, float delta_exit_kmh,
+		float switch_iq_a, uint16_t relay_settle_ms, bool auto_delta) {
+	if(battery_current_max_a < 1.0f || battery_current_max_a > 70.0f ||
+	   wheel_diameter_m < 0.10f || wheel_diameter_m > 0.60f ||
+	   motor_poles < 2u || motor_poles > 60u ||
+	   delta_enter_kmh < 5.0f || delta_enter_kmh > 80.0f ||
+	   delta_exit_kmh < 0.0f || delta_exit_kmh >= delta_enter_kmh ||
+	   switch_iq_a < 0.2f || switch_iq_a > 10.0f ||
+	   relay_settle_ms < 20u || relay_settle_ms > 500u) {
+		return false;
+	}
+
+	g30_cfg.battery_current_max_a = battery_current_max_a;
+	g30_cfg.wheel_diameter_m = wheel_diameter_m;
+	g30_cfg.motor_poles = motor_poles;
+	g30_cfg.delta_enter_kmh = delta_enter_kmh;
+	g30_cfg.delta_exit_kmh = delta_exit_kmh;
+	g30_cfg.switch_iq_a = switch_iq_a;
+	g30_cfg.relay_settle_ms = relay_settle_ms;
+
+	if(auto_delta) {
+		g30_cfg.flags |= G30_CFG_FLAG_AUTO_DELTA;
+	} else {
+		g30_cfg.flags &= (uint8_t)~G30_CFG_FLAG_AUTO_DELTA;
+	}
+	return true;
+}
+
+void g30_config_set_hall_table(const uint8_t hall_table[8]) {
+	if(hall_table != NULL) {
+		memcpy(g30_cfg.hall_table, hall_table, sizeof(g30_cfg.hall_table));
+	}
+}
+
+bool g30_config_profile_valid(bool delta) {
+	const uint8_t flag = delta ? G30_CFG_FLAG_DELTA_VALID : G30_CFG_FLAG_STAR_VALID;
+	return (g30_cfg.flags & flag) != 0u;
+}
+
+bool g30_config_auto_delta_enabled(void) {
+	return (g30_cfg.flags & G30_CFG_FLAG_AUTO_DELTA) != 0u &&
+			g30_config_profile_valid(false) &&
+			g30_config_profile_valid(true);
+}
+
+bool g30_config_apply_runtime_profile(bool delta) {
+	if(!g30_config_profile_valid(delta)) {
+		return false;
+	}
+
+	g30_config_copy_profile_to_mc(delta);
+
+	const float current_max =
+			mc_conf.l_current_max * CURRENT_FACTOR_A * mc_conf.l_current_max_scale;
+	const float current_min =
+			mc_conf.l_current_min * CURRENT_FACTOR_A * mc_conf.l_current_min_scale;
+
+	FOCVars[M1].max_i_batt = mc_conf.l_in_current_max * CURRENT_FACTOR_A;
+	FOCVars[M1].min_i_batt = mc_conf.l_in_current_min * CURRENT_FACTOR_A;
+
+	mc_conf.lo_current_min = mc_conf.l_current_min;
+	mc_conf.lo_current_max = mc_conf.l_current_max;
+	mc_conf.lo_current_motor_min_now = mc_conf.l_current_min;
+	mc_conf.lo_current_motor_max_now = mc_conf.l_current_max;
+	mc_conf.lo_in_current_max = mc_conf.l_in_current_max;
+	mc_conf.lo_in_current_min = mc_conf.l_in_current_min;
+
+	PIDIqHandle_M1.hKpGain = mc_conf.foc_current_kp * (float)TF_KPDIV;
+	PIDIqHandle_M1.hKiGain =
+			mc_conf.foc_current_ki * (float)TF_KIDIV / (float)mc_conf.foc_f_sw;
+	PIDIqHandle_M1.hDefKpGain = PIDIqHandle_M1.hKpGain;
+	PIDIqHandle_M1.hDefKiGain = PIDIqHandle_M1.hKiGain;
+
+	PIDIdHandle_M1.hKpGain = PIDIqHandle_M1.hKpGain;
+	PIDIdHandle_M1.hKiGain = PIDIqHandle_M1.hKiGain;
+	PIDIdHandle_M1.hDefKpGain = PIDIdHandle_M1.hKpGain;
+	PIDIdHandle_M1.hDefKiGain = PIDIdHandle_M1.hKiGain;
+
+	/* Never carry integrator energy across an electrical topology change. */
+	PIDIqHandle_M1.wIntegralTerm = 0;
+	PIDIdHandle_M1.wIntegralTerm = 0;
+
+	SpeednTorqCtrlM1.MaxPositiveTorque = current_max;
+	SpeednTorqCtrlM1.MinNegativeTorque = current_min;
+	FW_M1.wNominalSqCurr = current_max * current_max;
+
+	memcpy(HALL_M1.lut, g30_cfg.hall_table, sizeof(g30_cfg.hall_table));
+	return true;
+}
+
+#endif /* G30P */
 
 /**
  * Detect and apply all parameters, current limits and sensors. This is done for

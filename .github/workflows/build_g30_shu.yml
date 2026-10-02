@@ -6,7 +6,7 @@ on:
       ref:
         description: Branch or commit to build
         required: true
-        default: feature/shu-coast-delta
+        default: feature/g30-config-app
   pull_request:
     branches: [ vesc_comp ]
     paths:
@@ -42,7 +42,7 @@ jobs:
           test -s "$BIN"
           python3 tools/make_shu_zip.py \
             "$BIN" \
-            "${{ github.workspace }}/SmartESC_G30_SHU_Coast_Delta.zip"
+            "${{ github.workspace }}/SmartESC_G30_SHU_Config_DualProfile.zip"
           python3 - <<'PY'
           import struct
           from pathlib import Path
@@ -59,11 +59,11 @@ jobs:
       - name: Upload G30 SHU candidate
         uses: actions/upload-artifact@v4
         with:
-          name: SmartESC-G30-SHU-${{ github.run_number }}
+          name: SmartESC-G30-Config-SHU-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
           path: |
             g30p/STM32CubeIDE/Debug/g30p.bin
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map
-            SmartESC_G30_SHU_Coast_Delta.zip
+            SmartESC_G30_SHU_Config_DualProfile.zip

@@ -37,6 +37,15 @@ void app_set_configuration(app_configuration *conf) {
 
 	HAL_UART_Init(&VESC_USART_DMA);
 
+#ifdef G30P
+	/*
+	 * The legacy task_init() entry point is not used by the normal SmartESC
+	 * startup path. Start the stock-BMS task here, where app configuration is
+	 * always applied during conf_general_init().
+	 */
+	g30_bms_init();
+#endif
+
 	switch(conf->shutdown_mode){
 	case SHUTDOWN_MODE_OFF_AFTER_10S:
 		PWR_set_shutdown_time(10);

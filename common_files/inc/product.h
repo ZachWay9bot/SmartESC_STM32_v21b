@@ -47,6 +47,26 @@
 #define BRAKE_LIGHT_GPIO_Port												 REAR_LED_GPIO_Port
 #define BRAKE_LIGHT_Pin														 REAR_LED_Pin
 
+/*
+ * G30 custom ride behaviour.
+ * Rear LED output is repurposed as the external STAR/DELTA relay control.
+ * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
+ */
+#define SESC_NO_REGEN                                                       1
+#define DELTA_RELAY_ENABLE                                                  1
+#define SESC_SHU_COMPAT                                                     1
+#define SESC_SHU_LITE                                                       1
+#define SESC_SHU_MAX_APP_BYTES                                              (52u * 1024u)
+#define G30_BMS_ACTIVATOR_ENABLE                                            1
+#define G30_BMS_ACTIVATOR_PERIOD_MS                                         (200u)
+#define G30_BMS_POLL_PERIOD_MS                                              (400u)
+#define G30_BMS_ONLINE_TIMEOUT_MS                                           (2000u)
+#define TRUE_COAST_IQ_A                                                     (1.5f)
+#define DELTA_ENTER_SPEED_KMH                                               (32.0f)
+#define DELTA_EXIT_SPEED_KMH                                                (26.0f)
+#define DELTA_SWITCH_MAX_IQ_A                                               (2.0f)
+#define DELTA_RELAY_SETTLE_MS                                               (100u)
+
 // Setting limits
 #define HW_LIM_CURRENT			-70.0, 70.0
 #define HW_LIM_CURRENT_IN		-70.0, 70.0
@@ -61,8 +81,17 @@
 #define MOT_TMR_MHZ 64
 #define HEAP_SIZE_KB 14
 #define CPU_MHZ  (64*1000000)
-#define APP_PAGE				126
-#define CONF_PAGE				127
+/*
+ * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
+ * update-control data used by the IAP/SHU rollback path.
+ *
+ * The stock application region ends at 0x0800DFFF (page 55). Pages 56/57
+ * (0x0800E000..0x0800E7FF) are used for SmartESC app/motor configuration.
+ * The documented stock update staging starts at 0x0800E800, so the normal
+ * IAP staging/calibration/update-control ranges remain available.
+ */
+#define APP_PAGE				56
+#define CONF_PAGE				57
 #define PAGE_SIZE				0x400
 
 #endif
@@ -176,13 +205,27 @@
 
 #define KMH_NO_LIMIT														 1337
 #define PRODUCT_FIRMWARE_VERSION                                      		 0x0001
+#if defined(G30P) && SESC_SHU_LITE
+/*
+ * The stock G30 IAP application window is only 52 KiB. The full VESC Tool
+ * command/serialization stack makes SmartESC substantially larger than that,
+ * so the reversible SHU image is deliberately a compact ride build.
+ * The normal branch keeps VESC Tool support.
+ */
+#define VESC_TOOL_ENABLE                                                     0
+#define ERROR_PRINTING                                                       0
+#define BATTERY_SUPPORT_LIION                                                1
+#define BATTERY_SUPPORT_LIFEPO                                               0
+#define BATTERY_SUPPORT_LEAD                                                 0
+#else
 #define VESC_TOOL_ENABLE													 1
-#define AUTO_RESET_FAULT													 1
 #define ERROR_PRINTING														 1
-#define MUSIC_ENABLE														 0
 #define BATTERY_SUPPORT_LIION												 1
 #define BATTERY_SUPPORT_LIFEPO												 1
 #define BATTERY_SUPPORT_LEAD												 1
+#endif
+#define AUTO_RESET_FAULT													 1
+#define MUSIC_ENABLE														 0
 #define ABS_OVR_CURRENT_TRIP_MS												 2.0
 #define MIN_DUTY_FOR_PWM_FREEWHEEL											 20
 #define CURRENT_DISPLAY_OFFSET											     80   //in cnts

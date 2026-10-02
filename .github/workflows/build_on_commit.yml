@@ -4,9 +4,10 @@ name: Build on commit
 
 # Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the vesc_comp branch
+  workflow_dispatch:
+  # Triggers the workflow on push or pull request events
   push:
-    branches: [ vesc_comp ]
+    branches: [ vesc_comp, feature/shu-coast-delta, feature/g30-config-app ]
   pull_request:
     branches: [ vesc_comp ]
     
@@ -19,7 +20,7 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     
     - name: log untrusted output
       run: |
@@ -30,15 +31,39 @@ jobs:
         # enable workflow command processing
         echo "::`echo -n ${{ github.token }} | sha256sum | head -c 64`::"
         
-    - name: 'Build M365'
+    - name: 'SHU source preflight'
+      run: python3 tools/test_shu_preflight.py
+
+    - name: 'Build G30P'
+      uses: docker://wsbu/stm32cubeide:latest
+      with:
+        entrypoint: /opt/stm32cubeide/stm32cubeide
+        args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
+
+    - name: 'Package G30P for SHU'
+      run: |
+        python3 tools/make_shu_zip.py \
+          "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
+          "${{ github.workspace }}/SmartESC_G30_SHU_Config_DualProfile.zip"
+
+    - name: 'Upload Artifact G30P + SHU package'
+      uses: actions/upload-artifact@v4
+      with:
+        path: |
+          ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
+          ${{ github.workspace }}/SmartESC_G30_SHU_Config_DualProfile.zip
+        name: g30p-config-shu-${{ github.run_number }}
+        retention-days: 5
+
+    - name: 'Build M365 regression target'
       uses: docker://wsbu/stm32cubeide:latest
       with:
         entrypoint: /opt/stm32cubeide/stm32cubeide
         args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
-    
+
     - name: 'Upload Artifact M365 - with build number'
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         path: ${{ github.workspace }}/m365/STM32CubeIDE/Debug/m365.bin
-        name: ${{ github.run_number }}
+        name: m365-${{ github.run_number }}
         retention-days: 5

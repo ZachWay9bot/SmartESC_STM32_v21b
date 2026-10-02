@@ -31,6 +31,53 @@
 extern mc_configuration mc_conf;
 extern app_configuration appconf;
 
+#ifdef G30P
+#define G30_CONFIG_MAGIC   0x53474346u /* "SGCF" */
+#define G30_CONFIG_VERSION 1u
+
+#define G30_CFG_FLAG_STAR_VALID   (1u << 0)
+#define G30_CFG_FLAG_DELTA_VALID  (1u << 1)
+#define G30_CFG_FLAG_AUTO_DELTA   (1u << 2)
+
+typedef struct {
+	float r_ohm;
+	float l_h;
+	float flux_wb;
+	float phase_current_max_a;
+} g30_foc_profile_t;
+
+typedef struct {
+	uint32_t magic;
+	uint16_t version;
+	uint16_t size;
+	uint16_t crc;
+	uint16_t reserved0;
+	g30_foc_profile_t star;
+	g30_foc_profile_t delta;
+	float battery_current_max_a;
+	float delta_enter_kmh;
+	float delta_exit_kmh;
+	float switch_iq_a;
+	float wheel_diameter_m;
+	uint16_t relay_settle_ms;
+	uint8_t motor_poles;
+	uint8_t flags;
+	uint8_t hall_table[8];
+} g30_sesc_config_t;
+
+void g30_config_init(void);
+const g30_sesc_config_t *g30_config_get(void);
+bool g30_config_store(void);
+bool g30_config_set_profile(bool delta, const g30_foc_profile_t *profile);
+bool g30_config_set_common(float battery_current_max_a, float wheel_diameter_m,
+		uint8_t motor_poles, float delta_enter_kmh, float delta_exit_kmh,
+		float switch_iq_a, uint16_t relay_settle_ms, bool auto_delta);
+void g30_config_set_hall_table(const uint8_t hall_table[8]);
+bool g30_config_apply_runtime_profile(bool delta);
+bool g30_config_profile_valid(bool delta);
+bool g30_config_auto_delta_enabled(void);
+#endif
+
 // Functions
 void conf_general_init(void);
 void conf_general_read_app_configuration(app_configuration *conf);
@@ -38,6 +85,7 @@ void conf_general_read_mc_configuration(mc_configuration *conf, bool is_motor_2)
 bool conf_general_store_mc_configuration(mc_configuration *conf, bool is_motor_2);
 void conf_update_override_current(mc_configuration *mcconf);
 void conf_general_setup_mc(mc_configuration *mcconf);
+void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float tc);
 void conf_general_update_current(mc_configuration *mcconf);
 mc_configuration* mc_interface_get_configuration(void);
 bool conf_general_store_app_configuration(app_configuration *conf);
