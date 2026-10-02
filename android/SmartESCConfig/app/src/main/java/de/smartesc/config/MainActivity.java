@@ -15,6 +15,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
     private NinebotBleClient ble;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private boolean starProfileValid;
 
     private TextView status, live, detectStatus;
     private Button connect;
@@ -174,6 +175,10 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
     private void confirmDetect(boolean delta) {
         if (!ble.isReady()) return;
+        if (delta && !starProfileValid) {
+            toast("Zuerst STAR erfolgreich erkennen");
+            return;
+        }
         new AlertDialog.Builder(this)
                 .setTitle(delta ? "DELTA erkennen" : "STAR erkennen")
                 .setMessage("Rad muss frei in der Luft sein. Gas nicht berühren. Der Motor wird verriegelt und anschließend gedreht. Fortfahren?")
@@ -298,6 +303,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
     }
 
     private void showProfile(SescProtocol.Profile p) {
+        if (!p.delta) starProfileValid = p.valid;
         EditText r=p.delta?deltaR:starR, l=p.delta?deltaL:starL,
                 fl=p.delta?deltaFlux:starFlux, ph=p.delta?deltaPhase:starPhase;
         r.setText(num(p.resistanceOhm*1000f,3));
