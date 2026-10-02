@@ -53,6 +53,7 @@ static volatile bool delta_coast_required = false;
 static bool delta_target = false;
 static delta_state_t delta_state = DELTA_STATE_IDLE;
 static TickType_t delta_deadline = 0;
+static volatile bool delta_setup_override = false;
 
 /*
  * G30 rear-light output is open-drain.
@@ -73,16 +74,57 @@ bool task_delta_is_active(void) {
 	return delta_active;
 }
 
+bool task_delta_setup_force(bool delta) {
+	/*
+	 * Caller must already have torque at zero and PWM disabled. Setup mode
+	 * suppresses automatic speed-based switching while R/L/flux are measured.
+	 */
+	delta_setup_override = true;
+	delta_coast_required = true;
+	delta_state = DELTA_STATE_IDLE;
+	delta_target = delta;
+
+	delta_write_output(delta);
+	delta_active = delta;
+
+	/*
+	 * Use the stored profile when one exists. During the first ever DELTA
+	 * detection no DELTA profile exists yet, so the caller deliberately
+	 * continues with the current conservative controller setup.
+	 */
+	(void)g30_config_apply_runtime_profile(delta);
+	return true;
+}
+
+void task_delta_setup_release(void) {
+	delta_setup_override = false;
+	delta_coast_required = false;
+	delta_state = DELTA_STATE_IDLE;
+}
+
+bool task_delta_setup_active(void) {
+	return delta_setup_override;
+}
+
 static void prv_delta_update(void) {
 #if DELTA_RELAY_ENABLE
+	if(delta_setup_override) {
+		return;
+	}
+
+	const g30_sesc_config_t *cfg = g30_config_get();
+	if(!g30_config_auto_delta_enabled()) {
+		return;
+	}
+
 	const float speed_kmh = VescToSTM_get_speed() * 3.6f;
 
 	if(delta_state == DELTA_STATE_IDLE) {
 		bool desired = delta_active;
 
-		if(!delta_active && speed_kmh >= DELTA_ENTER_SPEED_KMH) {
+		if(!delta_active && speed_kmh >= cfg->delta_enter_kmh) {
 			desired = true;
-		} else if(delta_active && speed_kmh <= DELTA_EXIT_SPEED_KMH) {
+		} else if(delta_active && speed_kmh <= cfg->delta_exit_kmh) {
 			desired = false;
 		}
 
@@ -96,7 +138,7 @@ static void prv_delta_update(void) {
 	if(delta_state == DELTA_STATE_WAIT_ZERO) {
 		delta_coast_required = true;
 
-		if(fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
+		if(fabsf(VescToSTM_get_iq()) <= cfg->switch_iq_a) {
 			/* Make the inverter high-Z before changing the winding topology. */
 			VescToSTM_pwm_stop();
 			delta_deadline = xTaskGetTickCount() + MS_TO_TICKS(20u);
@@ -108,7 +150,16 @@ static void prv_delta_update(void) {
 		if((int32_t)(xTaskGetTickCount() - delta_deadline) >= 0) {
 			delta_write_output(delta_target);
 			delta_active = delta_target;
-			delta_deadline = xTaskGetTickCount() + MS_TO_TICKS(DELTA_RELAY_SETTLE_MS);
+
+			if(!g30_config_apply_runtime_profile(delta_target)) {
+				/* Fail-safe back to STAR if a requested profile is unavailable. */
+				delta_write_output(false);
+				delta_active = false;
+				delta_target = false;
+				(void)g30_config_apply_runtime_profile(false);
+			}
+
+			delta_deadline = xTaskGetTickCount() + MS_TO_TICKS(cfg->relay_settle_ms);
 			delta_state = DELTA_STATE_SETTLE;
 		}
 	} else if(delta_state == DELTA_STATE_SETTLE) {
@@ -127,6 +178,18 @@ bool task_delta_coast_required(void) {
 }
 
 bool task_delta_is_active(void) {
+	return false;
+}
+
+bool task_delta_setup_force(bool delta) {
+	(void)delta;
+	return false;
+}
+
+void task_delta_setup_release(void) {
+}
+
+bool task_delta_setup_active(void) {
 	return false;
 }
 #endif
