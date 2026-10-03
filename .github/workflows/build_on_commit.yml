@@ -42,6 +42,8 @@ jobs:
 
     - name: 'Package G30P for SHU'
       run: |
+        cp "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
+          "${{ github.workspace }}/DeltaESC_G30D_v0.2.bin"
         python3 tools/make_shu_zip.py \
           "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
           "${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip"
@@ -50,7 +52,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         path: |
-          ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
+          ${{ github.workspace }}/DeltaESC_G30D_v0.2.bin
           ${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip
         name: DeltaESC-G30D-v0.2-${{ github.run_number }}
         retention-days: 5
