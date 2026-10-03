@@ -1,8 +1,8 @@
-# SmartESC Config (Android)
+# DeltaESC Config (Android)
 
-Companion app for the compact G30D SmartESC SHU build.
+Companion app for the compact G30D DeltaESC SHU build.
 
-It does **not** emulate SHFW and does not depend on SHU's SHFW-only configuration UI. The app talks to SmartESC through a small private `0x7D` command set carried over the stock G30 BLE/dashboard link.
+It does **not** emulate SHFW and does not depend on SHU's SHFW-only configuration UI. The app talks to DeltaESC through a small private `0x7D` command set carried over the stock G30 BLE/dashboard link.
 
 ## Current functions
 
@@ -31,9 +31,9 @@ Ninebot transport frame:
 5A A5 LEN SRC DST CMD ARG payload... CK_LO CK_HI
 ```
 
-SmartESC Config uses `CMD=0x7D`, phone/app source `0x3E`, ESC destination `0x20`.
+DeltaESC Config uses `CMD=0x7D`, phone/app source `0x3E`, ESC destination `0x20`.
 
-The protocol is intentionally independent from SHFW so firmware updates can still be handled by ScooterHacking Utility while this app handles SmartESC setup and telemetry.
+The protocol is intentionally independent from SHFW so firmware updates can still be handled by ScooterHacking Utility while this app handles DeltaESC setup and telemetry.
 
 ## Build
 
@@ -41,4 +41,4 @@ The protocol is intentionally independent from SHFW so firmware updates can stil
 gradle :app:assembleDebug
 ```
 
-The GitHub Actions workflow `Build SmartESC Config APK` uploads the debug APK as an artifact.
+The GitHub Actions workflow `Build DeltaESC Config APK` uploads the debug APK as an artifact.
