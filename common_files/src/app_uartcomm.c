@@ -31,8 +31,10 @@
 #include "ninebot.h"
 #include "VescCommand.h"
 #include "task_init.h"
+#include "task_LED.h"
 #include "timers.h"
 #include <math.h>
+#include <string.h>
 
 NinebotPack frame;
 
@@ -45,6 +47,204 @@ uint32_t app_updaterate();
 
 TaskHandle_t task_app_handle;
 TimerHandle_t xTimer;
+
+#if defined(G30P) && SESC_SHU_COMPAT
+/*
+ * Stock G30 / SHU protocol sniffer.
+ *
+ * SmartESC's normal dashboard protocol is left untouched. In parallel we watch
+ * for checksum-valid stock Ninebot frames:
+ *
+ *   5A A5 LEN SRC DST CMD ARG payload[LEN] CK_LO CK_HI
+ *
+ * If SHU starts an ESC firmware-update transaction while the scooter is
+ * stationary, SmartESC releases the motor and reboots so the preserved stock
+ * 4 KiB IAP bootloader can take over. The phone-side flasher will retry the
+ * update command after the reset.
+ */
+typedef struct {
+	uint8_t state;
+	uint8_t index;
+	uint8_t expected;
+	uint8_t body[80];
+} shu_rx_t;
+
+static shu_rx_t shu_rx;
+
+static void shu_rx_reset(void) {
+	memset(&shu_rx, 0, sizeof(shu_rx));
+}
+
+/*
+ * IAP start has exactly four payload bytes on the reversible G30 build:
+ *   uint16_t firmware_size_le
+ *   uint16_t version_le
+ *
+ * There are two LEN conventions in public Ninebot tooling:
+ *   - firmware-verified G30 framing: LEN == payload bytes      -> LEN = 4
+ *   - older flasher tooling:         LEN == 4 + payload bytes -> LEN = 8
+ *
+ * Both produce the same 11-byte body after 5A A5:
+ *   LEN SRC DST CMD ARG PAY0 PAY1 PAY2 PAY3 CK_LO CK_HI
+ *
+ * We deliberately recognize only this exact, checksum-valid IAP-start shape.
+ * That matters because entering recovery invalidates the current app vector;
+ * a fuzzy opcode detector would be a remarkably stupid place to be generous.
+ */
+#define SHU_IAP_START_BODY_BYTES 11u
+
+static bool shu_is_iap_start(void) {
+	const uint8_t len = shu_rx.body[0];
+	const uint8_t src = shu_rx.body[1];
+	const uint8_t dst = shu_rx.body[2];
+	const uint8_t cmd = shu_rx.body[3];
+	const uint8_t arg = shu_rx.body[4];
+
+	if(len != 4u && len != 8u) {
+		return false;
+	}
+
+	if(dst != 0x20u || (src != 0x21u && src != 0x3Eu && src != 0x3Fu)) {
+		return false;
+	}
+
+	if((cmd != 0x02u && cmd != 0x03u) || arg != 0x07u) {
+		return false;
+	}
+
+	const uint16_t fw_size =
+			(uint16_t)shu_rx.body[5] |
+			((uint16_t)shu_rx.body[6] << 8);
+
+	if(fw_size < 256u || (uint32_t)fw_size > SESC_SHU_MAX_APP_BYTES) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool shu_feed_stock_frame(uint8_t b) {
+	switch(shu_rx.state) {
+	case 0:
+		if(b == 0x5A) {
+			shu_rx.state = 1;
+		}
+		break;
+
+	case 1:
+		if(b == 0xA5) {
+			shu_rx.state = 2;
+			shu_rx.index = 0;
+			shu_rx.expected = 0;
+		} else if(b != 0x5A) {
+			shu_rx_reset();
+		}
+		break;
+
+	case 2:
+		if(shu_rx.index >= sizeof(shu_rx.body)) {
+			shu_rx_reset();
+			break;
+		}
+
+		shu_rx.body[shu_rx.index++] = b;
+
+		if(shu_rx.index == 1u) {
+			/*
+			 * Only the exact 4-byte IAP-start payload is interesting here.
+			 * Accept LEN=4 (verified convention) and LEN=8 (legacy tooling).
+			 */
+			if(shu_rx.body[0] == 4u || shu_rx.body[0] == 8u) {
+				shu_rx.expected = SHU_IAP_START_BODY_BYTES;
+			} else {
+				shu_rx_reset();
+				break;
+			}
+		}
+
+		if(shu_rx.expected && shu_rx.index == shu_rx.expected) {
+			uint16_t sum = 0;
+			for(uint8_t i = 0; i < (uint8_t)(SHU_IAP_START_BODY_BYTES - 2u); i++) {
+				sum = (uint16_t)(sum + shu_rx.body[i]);
+			}
+
+			const uint16_t calc = (uint16_t)(~sum);
+			const uint16_t recv =
+					(uint16_t)shu_rx.body[SHU_IAP_START_BODY_BYTES - 2u] |
+					((uint16_t)shu_rx.body[SHU_IAP_START_BODY_BYTES - 1u] << 8);
+
+			const bool request = (calc == recv) && shu_is_iap_start();
+			shu_rx_reset();
+			return request;
+		}
+		break;
+
+	default:
+		shu_rx_reset();
+		break;
+	}
+
+	return false;
+}
+
+#define G30_STOCK_APP_VECTOR_BASE 0x08001000u
+
+bool app_shu_invalidate_app_vector(void) {
+	/*
+	 * The stock bootloader has a recovery path for an invalid application.
+	 * Clearing the upper half-word of the application's initial stack pointer
+	 * changes e.g. 0x2000xxxx into 0x0000xxxx without erasing any code page.
+	 *
+	 * That is preferable to guessing a revision-specific update-control block:
+	 * after reset the current SmartESC image is intentionally non-bootable and
+	 * the preserved stock IAP bootloader must remain in recovery/update mode.
+	 * A successful SHU flash writes a fresh vector table and restores normal
+	 * boot automatically.
+	 */
+	HAL_StatusTypeDef st;
+
+	if(HAL_FLASH_Unlock() != HAL_OK) {
+		return false;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
+
+	/* Program high half first. One successful write is enough to invalidate SP. */
+	st = HAL_FLASH_Program(FLASH_TYPEPROGRAM_HALFWORD,
+			G30_STOCK_APP_VECTOR_BASE + 2u, 0x0000u);
+
+	HAL_FLASH_Lock();
+	return st == HAL_OK;
+}
+
+static void shu_handoff_to_stock_iap(void) {
+	/* Never enter a flasher while the wheel is moving. */
+	if(fabsf(VescToSTM_get_speed()) > 0.5f) {
+		return;
+	}
+
+	VescToSTM_set_current_rel(0.0f);
+	vTaskDelay(MS_TO_TICKS(20));
+
+	if(fabsf(VescToSTM_get_iq()) > DELTA_SWITCH_MAX_IQ_A) {
+		return;
+	}
+
+	/* Fail-safe STAR and high-Z inverter before committing to IAP recovery. */
+	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+	VescToSTM_pwm_stop();
+	vTaskDelay(MS_TO_TICKS(10));
+
+	if(!app_shu_invalidate_app_vector()) {
+		/* Keep the current firmware running if flash programming was rejected. */
+		VescToSTM_pwm_start();
+		return;
+	}
+
+	__disable_irq();
+	NVIC_SystemReset();
+}
+#endif
 
 void my_uart_send_data(unsigned char *buf, unsigned int len, port_str * port){
 	if(port->half_duplex){
@@ -176,6 +376,16 @@ void vTimerCallback( TimerHandle_t xTimer ){
 	// Apply throttle curve
 	pwr = utils_throttle_curve(pwr, config.throttle_exp, config.throttle_exp_brake, config.throttle_exp_mode);
 
+#if defined(G30P) && SESC_NO_REGEN
+	/*
+	 * Physical brake is a motor cut/coast input on this build.
+	 * Never turn a brake request into negative torque.
+	 */
+	if(brake > 0.0f || pwr < 0.0f) {
+		pwr = 0.0f;
+	}
+#endif
+
 	// Apply ramping
 	static uint32_t last_time = 0;
 	static float pwr_ramp = 0.0;
@@ -188,9 +398,53 @@ void vTimerCallback( TimerHandle_t xTimer ){
 		pwr = pwr_ramp;
 	}
 
-	if(app_is_output_disabled()){
+#if defined(G30P) && SESC_NO_REGEN
+	/* Brake must cut propulsion immediately, without regenerative torque. */
+	if(brake > 0.0f) {
+		pwr_ramp = 0.0f;
+		pwr = 0.0f;
+	}
+#endif
+
+#ifdef G30P
+	/*
+	 * STAR/DELTA transition owns the motor for a short window. task_LED.c
+	 * waits for low Iq, disables PWM, changes the relay topology and keeps
+	 * torque inhibited until the contacts have settled.
+	 */
+	if(task_delta_coast_required()) {
+		pwr_ramp = 0.0f;
+		VescToSTM_set_current_rel(0.0f);
 		return;
 	}
+#endif
+
+	if(app_is_output_disabled()){
+#if defined(G30P) && SESC_NO_REGEN
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+#endif
+		return;
+	}
+
+#if defined(G30P) && SESC_NO_REGEN
+	/*
+	 * True coast: once commanded torque and measured Iq are near zero, turn
+	 * the inverter PWM fully off. On throttle re-application pwm_start()
+	 * re-synchronizes to the Hall angle and preloads the current controller.
+	 */
+	if(pwr <= 0.0001f) {
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+		return;
+	}
+
+	VescToSTM_pwm_start();
+#endif
 
 	// Use the filtered and mapped voltage for control according to the configuration.
 	switch (config.ctrl_type) {
@@ -200,18 +454,30 @@ void vTimerCallback( TimerHandle_t xTimer ){
 		break;
 
 	case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_CENTER:
+#if defined(G30P) && SESC_NO_REGEN
+		VescToSTM_set_current_rel(pwr > 0.0f ? pwr : 0.0f);
+#else
 		if(pwr>=0){
 			VescToSTM_set_current_rel(pwr);
 		}else{
 			VescToSTM_set_brake_current_rel(pwr);
 		}
+#endif
 		break;
 	case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC:
+#if defined(G30P) && SESC_NO_REGEN
+		if(brake > 0.0f){
+			VescToSTM_set_current_rel(0.0f);
+		}else{
+			VescToSTM_set_current_rel(pwr > 0.0f ? pwr : 0.0f);
+		}
+#else
 		if(brake>0){
 			VescToSTM_set_brake_current_rel(brake);
 		}else if(pwr>=0){
 			VescToSTM_set_current_rel(pwr);
 		}
+#endif
 
 		break;
 
@@ -305,6 +571,11 @@ void task_app(void * argument)
 	for(;;)
 	{
 		while(rd_ptr != uart_get_write_pos(port)) {
+#if defined(G30P) && SESC_SHU_COMPAT
+			if(shu_feed_stock_frame(usart_rx_dma_buffer[rd_ptr])) {
+				shu_handoff_to_stock_iap();
+			}
+#endif
 			if(ninebot_parse(usart_rx_dma_buffer[rd_ptr] ,&frame)	==0){
 				//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
 				switch(frame.cmd){
@@ -333,8 +604,15 @@ void task_app(void * argument)
 
 			}
 			m365_to_display.speed *= DIR_MUL;
-			int temp = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
-			m365_to_display.battery = temp>100?100:temp;
+#ifdef G30P
+			if(g30_bms_is_online()) {
+				m365_to_display.battery = g30_bms_get_soc();
+			} else
+#endif
+			{
+				int temp = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
+				m365_to_display.battery = temp>100?100:temp;
+			}
 			m365_to_display.beep=0;
 			m365_to_display.faultcode=pMCI[M1]->pSTM->hFaultOccurred;
 

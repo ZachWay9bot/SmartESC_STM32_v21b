@@ -42,11 +42,20 @@ _estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
 _Min_Heap_Size = 0x200 ; /* required amount of heap */
 _Min_Stack_Size = 0x400 ; /* required amount of stack */
 
-/* Memories definition */
+/*
+ * SHU-compatible G30 layout:
+ *   0x08000000..0x08000FFF  stock Ninebot IAP bootloader (preserved)
+ *   0x08001000..0x0800DFFF  SmartESC application (52 KiB max)
+ *   0x0800E000..0x0800E7FF  SmartESC configuration (2 KiB)
+ *   0x0800E800..             stock G30 update staging / calibration metadata
+ *
+ * The 52 KiB application ceiling is intentional: it matches the documented
+ * stock G30 IAP application region and its 16-bit firmware-size protocol.
+ */
 MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 20K
-  FLASH    (rx)    : ORIGIN = 0x8000000,   LENGTH = 128K
+  FLASH  (rx)     : ORIGIN = 0x08001000,   LENGTH = 52K
 }
 
 /* Sections */
