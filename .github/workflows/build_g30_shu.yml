@@ -2,7 +2,7 @@ name: Build DeltaESC G30D SHU candidate
 
 on:
   push:
-    branches: [ feature/deltaesc-branding ]
+    branches: [ feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03 ]
     paths:
       - 'g30p/**'
       - 'common_files/**'
