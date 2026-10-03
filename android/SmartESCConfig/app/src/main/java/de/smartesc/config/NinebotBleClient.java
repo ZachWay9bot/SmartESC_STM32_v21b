@@ -130,6 +130,23 @@ public final class NinebotBleClient {
         }
     }
 
+    /**
+     * Read a normal stock Ninebot register through the already authenticated
+     * dashboard/BLE bridge. This is intentionally read-only and is used before
+     * flashing DeltaESC to prove App -> BLE -> dashboard -> ESC communication.
+     */
+    public void sendStockRead(int dst, int reg, int byteCount) {
+        if (!ready) {
+            listener.onStatus("Noch nicht verbunden/authentifiziert");
+            return;
+        }
+        if (encryptedMode) {
+            queueBytes(crypto.encrypt(SescProtocol.buildStockReadBleInner(dst,reg,byteCount)));
+        } else {
+            queueBytes(SescProtocol.buildStockRead(dst,reg,byteCount));
+        }
+    }
+
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override @SuppressLint("MissingPermission")
         public void onConnectionStateChange(BluetoothGatt g, int status, int newState) {
@@ -290,7 +307,7 @@ public final class NinebotBleClient {
             if (f.cmd == 0x5D && pairState == PAIR_WAIT_5D && f.arg == 1) {
                 pairState = PAIR_READY;
                 ready = true;
-                listener.onStatus("SmartESC BLE bereit");
+                listener.onStatus("DeltaESC BLE bereit");
                 listener.onReady(true);
                 return;
             }

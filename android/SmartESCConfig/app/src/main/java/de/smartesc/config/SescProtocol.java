@@ -6,6 +6,16 @@ import java.util.Arrays;
 public final class SescProtocol {
     public static final int CMD_CONFIG = 0x7D;
 
+    // Stock Ninebot G30 register protocol.
+    public static final int CMD_READ = 0x01;
+    // Firmware captures use 0x01 for read responses; some public tools/docs use 0x04.
+    // Accept both for diagnostics, but only ever transmit CMD_READ.
+    public static final int CMD_READ_RESPONSE_ALT = 0x04;
+    public static final int ESC_ADDR = 0x20;
+    public static final int APP_ADDR = 0x3E;
+    public static final int ESC_REG_SERIAL = 0x10;
+    public static final int ESC_REG_FW_VERSION = 0x1A;
+
     public static final int HELLO = 0x00;
     public static final int TELEMETRY = 0x01;
     public static final int GET_COMMON = 0x02;
@@ -38,7 +48,18 @@ public final class SescProtocol {
     }
 
     public static byte[] buildConfig(int arg, byte[] payload) {
-        return buildFrame(0x3E, 0x20, CMD_CONFIG, arg, payload);
+        return buildFrame(APP_ADDR, ESC_ADDR, CMD_CONFIG, arg, payload);
+    }
+
+    public static byte[] stockReadPayload(int byteCount) {
+        if (byteCount < 1 || byteCount > 0xFFFF) {
+            throw new IllegalArgumentException("invalid stock read length");
+        }
+        return new byte[] { (byte)(byteCount & 0xFF), (byte)((byteCount >>> 8) & 0xFF) };
+    }
+
+    public static byte[] buildStockRead(int dst, int reg, int byteCount) {
+        return buildFrame(APP_ADDR, dst, CMD_READ, reg, stockReadPayload(byteCount));
     }
 
     /**
@@ -61,7 +82,11 @@ public final class SescProtocol {
     }
 
     public static byte[] buildConfigBleInner(int arg, byte[] payload) {
-        return buildBleInner(0x3E,0x20,CMD_CONFIG,arg,payload);
+        return buildBleInner(APP_ADDR,ESC_ADDR,CMD_CONFIG,arg,payload);
+    }
+
+    public static byte[] buildStockReadBleInner(int dst, int reg, int byteCount) {
+        return buildBleInner(APP_ADDR,dst,CMD_READ,reg,stockReadPayload(byteCount));
     }
 
     public static Frame parseBleInner(byte[] raw) {
@@ -163,6 +188,38 @@ public final class SescProtocol {
         t.detectProgress = u8(p[14]);
         t.detectError = (byte)p[15];
         return t;
+    }
+
+    public static boolean isStockReadResponse(Frame f, int src, int reg) {
+        if (f == null) return false;
+        return f.src == src && f.dst == APP_ADDR && f.arg == reg &&
+                (f.cmd == CMD_READ || f.cmd == CMD_READ_RESPONSE_ALT);
+    }
+
+    public static String stockAscii(byte[] p) {
+        if (p == null || p.length == 0) return "";
+        int n = 0;
+        while (n < p.length && p[n] != 0) n++;
+        return new String(p,0,n,StandardCharsets.US_ASCII).trim();
+    }
+
+    /**
+     * G30 DRV encoding observed in stock firmware: 0x0613 == DRV 1.6.13.
+     * Keep the raw value in the string as a sanity check for unusual clone firmware.
+     */
+    public static String formatG30DrvVersion(byte[] p) {
+        if (p == null || p.length < 2) return "DRV ?";
+        int v = u16(p,0);
+        int minor = (v >>> 8) & 0xFF;
+        int bcd = v & 0xFF;
+        int tens = (bcd >>> 4) & 0x0F;
+        int ones = bcd & 0x0F;
+        if (tens <= 9 && ones <= 9) {
+            int patch = tens * 10 + ones;
+            return String.format(java.util.Locale.US,
+                    "DRV 1.%d.%d (0x%04X)", minor, patch, v);
+        }
+        return String.format(java.util.Locale.US,"DRV raw 0x%04X",v);
     }
 
     public static int u8(byte b) { return b & 0xFF; }

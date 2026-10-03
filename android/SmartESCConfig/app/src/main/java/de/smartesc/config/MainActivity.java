@@ -16,9 +16,17 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
     private NinebotBleClient ble;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private boolean starProfileValid;
+    private boolean deltaEscDetected;
+    private boolean stockEscDetected;
+    private boolean encryptedSession;
+    private boolean stockDiagTimedOut;
+    private String stockDrv = "--";
+    private String stockSerial = "--";
 
-    private TextView status, live, detectStatus;
+    private TextView status, stockDiag, live, detectStatus;
     private Button connect;
+    private Button readButton, applyButton, saveButton;
+    private Button detectStarButton, detectDeltaButton, rereadButton;
 
     private EditText battA, wheelMm, poles, enterKmh, exitKmh, switchIq, settleMs, detectLoss;
     private CheckBox autoDelta;
@@ -28,7 +36,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
     private final Runnable poll = new Runnable() {
         @Override public void run() {
-            if (ble != null && ble.isReady()) {
+            if (ble != null && ble.isReady() && deltaEscDetected) {
                 ble.sendConfig(SescProtocol.TELEMETRY,new byte[0]);
                 ble.sendConfig(SescProtocol.DETECT_STATUS,new byte[0]);
             }
@@ -60,6 +68,12 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         connect.setText("G30 suchen & verbinden");
         connect.setOnClickListener(v -> ensurePermissionsAndScan());
         root.addView(connect);
+
+        section(root,"Verbindungsdiagnose");
+        stockDiag = text("BLE: -- · ESC bridge: --",14,true);
+        root.addView(stockDiag);
+        Button stockDiagButton = button("STOCK ESC TEST", v -> runStockDiagnostic());
+        root.addView(stockDiagButton);
 
         section(root,"Live");
         live = text("Speed --  |  U --  |  Iq --  |  Batt --",16,true);
@@ -93,12 +107,12 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        Button read = button("READ", v -> readAll());
-        Button apply = button("APPLY RAM", v -> applyAll());
-        Button save = button("SAVE FLASH", v -> saveAll());
-        row.addView(read,new LinearLayout.LayoutParams(0,wrap(),1));
-        row.addView(apply,new LinearLayout.LayoutParams(0,wrap(),1));
-        row.addView(save,new LinearLayout.LayoutParams(0,wrap(),1));
+        readButton = button("READ", v -> readAll());
+        applyButton = button("APPLY RAM", v -> applyAll());
+        saveButton = button("SAVE FLASH", v -> saveAll());
+        row.addView(readButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        row.addView(applyButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        row.addView(saveButton,new LinearLayout.LayoutParams(0,wrap(),1));
         root.addView(row);
 
         section(root,"Motor Setup");
@@ -107,12 +121,16 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
         LinearLayout detectRow = new LinearLayout(this);
         detectRow.setOrientation(LinearLayout.HORIZONTAL);
-        detectRow.addView(button("DETECT STAR",v -> confirmDetect(false)),new LinearLayout.LayoutParams(0,wrap(),1));
-        detectRow.addView(button("DETECT DELTA",v -> confirmDetect(true)),new LinearLayout.LayoutParams(0,wrap(),1));
+        detectStarButton = button("DETECT STAR",v -> confirmDetect(false));
+        detectDeltaButton = button("DETECT DELTA",v -> confirmDetect(true));
+        detectRow.addView(detectStarButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        detectRow.addView(detectDeltaButton,new LinearLayout.LayoutParams(0,wrap(),1));
         root.addView(detectRow);
 
-        Button reread = button("Profile nach Setup neu laden",v -> readProfiles());
-        root.addView(reread);
+        rereadButton = button("Profile nach Setup neu laden",v -> readProfiles());
+        root.addView(rereadButton);
+
+        updateDeltaControls(false);
 
         section(root,"Hinweis");
         root.addView(text("Änderungen werden zuerst nur im RAM angewendet. Erst SAVE FLASH schreibt dauerhaft. Die Firmware akzeptiert kritische Änderungen und Motor-Setup nur im Stillstand.",13,false));
@@ -139,8 +157,62 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         if (requestCode == REQ_PERMS) ensurePermissionsAndScan();
     }
 
+    private void runStockDiagnostic() {
+        if (ble == null || !ble.isReady()) {
+            toast("Noch nicht verbunden");
+            return;
+        }
+
+        stockEscDetected = false;
+        stockDiagTimedOut = false;
+        stockDrv = "--";
+        stockSerial = "--";
+        updateDiagnosticText();
+
+        // Read-only stock G30 requests. Version first, then serial number.
+        ble.sendStockRead(SescProtocol.ESC_ADDR,SescProtocol.ESC_REG_FW_VERSION,2);
+        handler.postDelayed(() -> {
+            if (ble != null && ble.isReady()) {
+                ble.sendStockRead(SescProtocol.ESC_ADDR,SescProtocol.ESC_REG_SERIAL,14);
+            }
+        },250);
+
+        handler.postDelayed(() -> {
+            if (!stockEscDetected && !deltaEscDetected) {
+                stockDiagTimedOut = true;
+                updateDiagnosticText();
+            }
+        },1800);
+    }
+
+    private void updateDiagnosticText() {
+        if (stockDiag == null) return;
+        String bleState = encryptedSession ? "BLE Crypto: OK" : "BLE Plain: OK";
+
+        if (deltaEscDetected) {
+            stockDiag.setText(bleState + " · DeltaESC protocol: OK" +
+                    (stockEscDetected ? "\nStock bridge: OK · " + stockDrv : ""));
+        } else if (stockEscDetected) {
+            String serialText = "--".equals(stockSerial) ? "" : " · SN " + stockSerial;
+            stockDiag.setText(bleState + " · ESC bridge: OK\n" + stockDrv + serialText);
+        } else if (stockDiagTimedOut) {
+            stockDiag.setText(bleState + " · ESC bridge: KEINE STOCK-ANTWORT");
+        } else {
+            stockDiag.setText(bleState + " · ESC bridge: teste…");
+        }
+    }
+
+    private void updateDeltaControls(boolean enabled) {
+        if (readButton != null) readButton.setEnabled(enabled);
+        if (applyButton != null) applyButton.setEnabled(enabled);
+        if (saveButton != null) saveButton.setEnabled(enabled);
+        if (detectStarButton != null) detectStarButton.setEnabled(enabled);
+        if (detectDeltaButton != null) detectDeltaButton.setEnabled(enabled);
+        if (rereadButton != null) rereadButton.setEnabled(enabled);
+    }
+
     private void readAll() {
-        if (!ble.isReady()) return;
+        if (!ble.isReady() || !deltaEscDetected) return;
         ble.sendConfig(SescProtocol.GET_COMMON,new byte[0]);
         readProfiles();
     }
@@ -226,18 +298,59 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
     @Override public void onReady(boolean encrypted) {
         runOnUiThread(() -> {
+            encryptedSession = encrypted;
+            deltaEscDetected = false;
+            stockEscDetected = false;
+            stockDiagTimedOut = false;
+            stockDrv = "--";
+            stockSerial = "--";
+
             status.setText(encrypted ? "Verbunden · Ninebot Crypto" : "Verbunden · Plain/Legacy");
             connect.setText("Neu verbinden");
-            ble.sendConfig(SescProtocol.HELLO,new byte[0]);
-            handler.postDelayed(this::readAll,150);
+            updateDeltaControls(false);
             handler.removeCallbacks(poll);
-            handler.post(poll);
+
+            // First prove the stock App -> BLE -> dashboard -> ESC path.
+            runStockDiagnostic();
+
+            // Then probe for DeltaESC. Stock DRV simply ignores CMD 0x7D.
+            handler.postDelayed(() -> {
+                if (ble != null && ble.isReady()) {
+                    ble.sendConfig(SescProtocol.HELLO,new byte[0]);
+                }
+            },550);
         });
     }
 
     @Override public void onFrame(SescProtocol.Frame frame) {
-        if (frame.cmd != SescProtocol.CMD_CONFIG) return;
-        runOnUiThread(() -> handleConfigFrame(frame));
+        runOnUiThread(() -> {
+            if (handleStockDiagnosticFrame(frame)) return;
+            if (frame.cmd == SescProtocol.CMD_CONFIG) handleConfigFrame(frame);
+        });
+    }
+
+    private boolean handleStockDiagnosticFrame(SescProtocol.Frame f) {
+        if (SescProtocol.isStockReadResponse(
+                f,SescProtocol.ESC_ADDR,SescProtocol.ESC_REG_FW_VERSION) &&
+                f.payload.length >= 2) {
+            stockEscDetected = true;
+            stockDrv = SescProtocol.formatG30DrvVersion(f.payload);
+            stockDiagTimedOut = false;
+            updateDiagnosticText();
+            return true;
+        }
+
+        if (SescProtocol.isStockReadResponse(
+                f,SescProtocol.ESC_ADDR,SescProtocol.ESC_REG_SERIAL) &&
+                f.payload.length > 0) {
+            stockEscDetected = true;
+            String s = SescProtocol.stockAscii(f.payload);
+            if (!s.isEmpty()) stockSerial = s;
+            stockDiagTimedOut = false;
+            updateDiagnosticText();
+            return true;
+        }
+        return false;
     }
 
     private void handleConfigFrame(SescProtocol.Frame f) {
@@ -246,7 +359,19 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
                 if (f.payload.length >= 5) {
                     int ver=SescProtocol.u8(f.payload[0]);
                     int flags=SescProtocol.u8(f.payload[1]);
-                    status.setText("DeltaESC Config v"+ver+" · flags 0x"+Integer.toHexString(flags));
+                    boolean firstHello = !deltaEscDetected;
+                    deltaEscDetected = true;
+                    stockDiagTimedOut = false;
+                    status.setText("DeltaESC erkannt · Protocol v"+ver+
+                            " · flags 0x"+Integer.toHexString(flags));
+                    updateDiagnosticText();
+                    updateDeltaControls(true);
+
+                    if (firstHello) {
+                        readAll();
+                        handler.removeCallbacks(poll);
+                        handler.post(poll);
+                    }
                 }
                 break;
             case SescProtocol.TELEMETRY: {
@@ -316,6 +441,13 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
     @Override public void onDisconnected() {
         runOnUiThread(() -> {
             handler.removeCallbacks(poll);
+            deltaEscDetected = false;
+            stockEscDetected = false;
+            stockDiagTimedOut = false;
+            stockDrv = "--";
+            stockSerial = "--";
+            if (stockDiag != null) stockDiag.setText("BLE: -- · ESC bridge: --");
+            updateDeltaControls(false);
             connect.setText("G30 suchen & verbinden");
         });
     }

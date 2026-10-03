@@ -46,4 +46,24 @@ public class ProtocolTest {
         assertEquals(SescProtocol.SET_COMMON,f.arg);
         assertArrayEquals(payload,f.payload);
     }
+
+    @Test public void stockFirmwareVersionReadMatchesVerifiedG30InnerFrame() {
+        byte[] p=SescProtocol.buildStockReadBleInner(
+                SescProtocol.ESC_ADDR,SescProtocol.ESC_REG_FW_VERSION,2);
+        assertArrayEquals(hex("5aa5023e20011a0200"),p);
+    }
+
+    @Test public void stockReadResponseAcceptsCapturedAndAlternateCommandCodes() {
+        SescProtocol.Frame captured=new SescProtocol.Frame(
+                0x20,0x3E,0x01,0x1A,hex("1306"));
+        SescProtocol.Frame alt=new SescProtocol.Frame(
+                0x20,0x3E,0x04,0x1A,hex("1306"));
+        assertTrue(SescProtocol.isStockReadResponse(captured,0x20,0x1A));
+        assertTrue(SescProtocol.isStockReadResponse(alt,0x20,0x1A));
+    }
+
+    @Test public void stockG30Version0613FormatsAsDrv1613() {
+        assertEquals("DRV 1.6.13 (0x0613)",
+                SescProtocol.formatG30DrvVersion(hex("1306")));
+    }
 }
