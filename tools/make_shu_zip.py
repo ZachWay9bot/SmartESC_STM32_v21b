@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build a ScooterHacking ZIPv3 package for the G30 STM32 SmartESC image.
+Build a ScooterHacking ZIPv3 package for the G30D DeltaESC image.
 
 The G30 SHU build is linked as an application at 0x08001000 so the stock
 4 KiB Ninebot IAP bootloader at 0x08000000 is not part of FIRM.bin.
@@ -146,7 +146,7 @@ def main() -> int:
     ap.add_argument("output", type=Path, help="output SHU ZIP")
     ap.add_argument(
         "--name",
-        default="SmartESC G30 SHU Config+DualProfile",
+        default="DeltaESC G30D v0.2",
         help="displayName stored in info.json",
     )
     args = ap.parse_args()
@@ -172,7 +172,7 @@ def main() -> int:
     }
 
     notes = (
-        "SmartESC G30 SHU Config + dual STAR/DELTA profile candidate\n"
+        "DeltaESC G30D v0.2 - based heavily on SmartESC by Koxx3\n"
         "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
         "Throttle release: coast\n"
         "Brake: motor cut, no regenerative braking\n"
