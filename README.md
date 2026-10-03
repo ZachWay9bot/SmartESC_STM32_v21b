@@ -1,8 +1,10 @@
-# SmartESC
+# DeltaESC
 
-**SmartESC (aka SESC) is an alternative firmware for Xiaomi M365 and Ninebot G30 controller.**
+**Custom G30D motor-controller firmware.**
 
-![image](https://user-images.githubusercontent.com/11454444/148704200-e28ee13e-c91b-4aac-8dbf-6021095749a5.png)
+> **Based heavily on [SmartESC by Koxx3](https://github.com/Koxx3/SmartESC_STM32_v2).**
+> DeltaESC is a heavily modified G30D-focused derivative. Existing upstream
+> copyright and license headers in the source are intentionally preserved.
 
 
 > ## G30D SHU Coast + Delta + Stock BMS — frozen hardware-test candidate
@@ -35,7 +37,7 @@
 > **Development PR:** [#2 — G30 SHU Coast + Delta + Stock BMS](../../pull/2)
 
 
-## Current development: SmartESC Config app + dual STAR/DELTA profiles
+## Current development: DeltaESC Config app + dual STAR/DELTA profiles
 
 The next G30D candidate is developed on `feature/g30-config-app` in [PR #3](../../pull/3).
 
@@ -43,8 +45,8 @@ Because SHU exposes its configuration UI only for SHFW, this branch adds a dedic
 
 The current candidate adds:
 
-- Android **SmartESC Config** companion app over the stock G30 BLE/dashboard path
-- lightweight SmartESC command protocol (`CMD 0x7D`)
+- Android **DeltaESC Config** companion app over the stock G30 BLE/dashboard path
+- lightweight DeltaESC command protocol (`CMD 0x7D`)
 - live speed, bus voltage, Iq, battery input current, SOC, BMS state and STAR/DELTA state
 - RAM-first configuration with explicit persistent save
 - configurable battery current, wheel size, pole count and relay switching thresholds
@@ -55,7 +57,7 @@ The current candidate adds:
 - automatic STAR/DELTA disabled until both profiles are valid
 - failed motor setup restores the previous controller configuration
 
-The companion app intentionally does **not** impersonate SHFW. SHU remains responsible for firmware flashing/recovery; SmartESC Config handles setup and telemetry.
+The companion app intentionally does **not** impersonate SHFW. SHU remains responsible for firmware flashing/recovery; DeltaESC Config handles setup and telemetry.
 
 Android source and build instructions: [android/SmartESCConfig](android/SmartESCConfig)
 
@@ -94,20 +96,20 @@ So the intended G30D workflow is:
 ```
 SHU / Bluetooth
       ↓
-SmartESC G30D
+DeltaESC G30D
       ↓
 preserved stock IAP bootloader
       ↓
 new SmartESC / stock / SHFW DRV
 ```
 
-The packaging and handoff code are implemented and CI-tested. The complete **SmartESC -> SHU -> stock/SHFW** rollback path still needs the first real-controller hardware validation, so keep ST-Link recovery available for that first test.
+The packaging and handoff code are implemented and CI-tested. The complete **DeltaESC -> SHU -> stock/SHFW** rollback path still needs the first real-controller hardware validation, so keep ST-Link recovery available for that first test.
 
 ### Current limitations
 
 - Hall sensors are still required; there is no sensorless mode in this build.
 - The first real-controller validation of SHU revert and the BMS no-communication current-limit behavior is still pending.
-- The compact SHU build uses `SESC_SHU_LITE`; the full VESC Tool stack remains disabled to stay inside the stock 52 KiB application window. The SmartESC Config companion app provides the G30D motor/current setup path instead.
+- The compact SHU build uses `SESC_SHU_LITE`; the full VESC Tool stack remains disabled to stay inside the stock 52 KiB application window. The DeltaESC Config companion app provides the G30D motor/current setup path instead.
 - The old upstream M365 BMS limitation applies to M365 support, not to the G30D stock-BMS integration described above.
 
 For the exact frozen G30D behavior and memory layout, see [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
@@ -123,7 +125,7 @@ The original upstream M365 release information remains available from the upstre
 
 Current Config branch build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fg30-config-app)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
 
-Android app workflow: [Build SmartESC Config APK](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_config_app.yml)
+Android app workflow: [Build DeltaESC Config APK](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_config_app.yml)
 
 G30 SHU candidate workflow: [Build G30 SHU candidate](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_g30_shu.yml)
 
@@ -167,31 +169,14 @@ Plug the ST-Link following this schematic:
 
 With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link004.html), the option bytes/read protection can be inspected when required.
 
-# VescTool
+# Configuration
 
-The **G30D SHU** candidates use `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so the full VESC Tool stack is intentionally disabled. The current `feature/g30-config-app` build uses the dedicated SmartESC Config Android app for motor detection, current limits and STAR/DELTA profiles.
+DeltaESC G30D uses the dedicated **DeltaESC Config** Android app for motor
+detection, current limits, telemetry and STAR/DELTA profiles.
 
-The information below applies to the original/full SmartESC builds that include the VESC interface.
-
-Use [VescTool](https://vesc-project.com/vesc_tool) to setup the motor and input properties.
-
-Use a serial USB adapter to connect the Xiaomi controller as an USB VESC :
-![image](https://user-images.githubusercontent.com/11454444/146688647-e3e4d833-7c93-4b4b-a297-cc61ba52071e.png)
-
-Launch VESCTool and connect with COM port.
-![image](https://user-images.githubusercontent.com/11454444/146687240-e393ea2e-dfd9-4fac-870e-4cf526a61187.png)
-
-Launcher Motor setup wizzard.
-![image](https://user-images.githubusercontent.com/11454444/146688494-b4a6c183-a89f-4517-af1f-61b5358aad40.png)
-
-Enter all your settings in the different windows.
-
-Enable the keyboard control :
-
-![image](https://user-images.githubusercontent.com/11454444/146688470-adf8a8f7-e3b4-43f4-9038-479d3d5585c5.png)
-
-You're ready to test your M365 controller with your keyboard !
-
+The full VESC Tool stack is intentionally disabled in the SHU build to keep the
+application inside the stock 52 KiB G30 firmware region. VESC Tool instructions
+belong to the upstream SmartESC project and are therefore not duplicated here.
 
 # ESP32 test module
 
@@ -202,24 +187,3 @@ Use ESP32 prototype board with and ESP32-devkit-c module :
 ![image](https://user-images.githubusercontent.com/11454444/146688428-d8978339-fab1-4a7b-a88f-305298b6b64f.png)
 
 Use the code provided in the [serial-trottle-brake-esp32](/serial-trottle-brake-esp32) folder with Platform.io
-
-# Error Code SESC (Smart ESC) in VESC Tool
-
-Can read it in "VESC Terminal" (or others Serial Terminal)
-
-- 0 = MC_NO_ERROR     (No error)
-- 0= MC_NO_FAULTS     (No error)
-- 1 = MC_FOC_DURATION (FOC rate to high)
-- 2 = MC_OVER_VOLT    (Software over voltage)
-- 4 = MC_UNDER_VOLT   (Software under voltage)
-- 8 = MC_OVER_TEMP    (Software over temperature)
-- 16 = MC_START_UP    (Startup failed)
-- 32 = MC_SPEED_FDBK  (Speed feedback)
-- 64 = MC_BREAK_IN    (Emergency input (Over current))
-- 128 = MC_SW_ERROR
-
-# Command available in VESCTool terminal
-
-- help (see all available commands)
-- foc_openloop [current] [erpm]  (Exemple : foc_openloop 10 500)
-- ... (lot of other commands)
