@@ -8,7 +8,7 @@ on:
       - 'android/SmartESCConfig/**'
       - '.github/workflows/build_config_app.yml'
   push:
-    branches: [ feature/g30-config-app ]
+    branches: [ feature/g30-config-app, feature/deltaesc-branding ]
     paths:
       - 'android/SmartESCConfig/**'
       - '.github/workflows/build_config_app.yml'
