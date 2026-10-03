@@ -1,6 +1,13 @@
 name: Build DeltaESC G30D SHU candidate
 
 on:
+  push:
+    branches: [ feature/deltaesc-branding ]
+    paths:
+      - 'g30p/**'
+      - 'common_files/**'
+      - 'tools/make_shu_zip.py'
+      - '.github/workflows/build_g30_shu.yml'
   workflow_dispatch:
     inputs:
       ref:
