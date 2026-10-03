@@ -47,6 +47,18 @@
 #define BRAKE_LIGHT_GPIO_Port												 REAR_LED_GPIO_Port
 #define BRAKE_LIGHT_Pin														 REAR_LED_Pin
 
+/*
+ * G30 custom ride behaviour.
+ * Rear LED output is repurposed as the external STAR/DELTA relay control.
+ * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
+ */
+#define SESC_NO_REGEN                                                       1
+#define DELTA_RELAY_ENABLE                                                  1
+#define DELTA_ENTER_SPEED_KMH                                               (32.0f)
+#define DELTA_EXIT_SPEED_KMH                                                (26.0f)
+#define DELTA_SWITCH_MAX_IQ_A                                               (2.0f)
+#define DELTA_RELAY_SETTLE_MS                                               (100u)
+
 // Setting limits
 #define HW_LIM_CURRENT			-70.0, 70.0
 #define HW_LIM_CURRENT_IN		-70.0, 70.0

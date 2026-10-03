@@ -31,6 +31,7 @@
 #include "product.h"
 #include "VescCommand.h"
 #include "VescToSTM.h"
+#include <math.h>
 
 
 TaskHandle_t LEDHandle;
@@ -38,6 +39,87 @@ TaskHandle_t LEDHandle;
 en_brake brake_mode = BRAKE_LIGHT_OFF;
 
 extern stm_state VescToSTM_mode;
+
+#ifdef G30P
+typedef enum {
+	DELTA_STATE_IDLE = 0,
+	DELTA_STATE_WAIT_ZERO,
+	DELTA_STATE_SETTLE
+} delta_state_t;
+
+static volatile bool delta_active = false;
+static volatile bool delta_coast_required = false;
+static bool delta_target = false;
+static delta_state_t delta_state = DELTA_STATE_IDLE;
+static TickType_t delta_settle_until = 0;
+
+/*
+ * G30 rear-light output is open-drain.
+ * RESET (low) is the fail-safe STAR state.
+ * SET releases the line; the external interface must provide the pull-up and
+ * use that released/high state to energise the DELTA relays.
+ */
+static void delta_write_output(bool active) {
+	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin,
+			active ? GPIO_PIN_SET : GPIO_PIN_RESET);
+}
+
+bool task_delta_coast_required(void) {
+	return delta_coast_required;
+}
+
+bool task_delta_is_active(void) {
+	return delta_active;
+}
+
+static void prv_delta_update(void) {
+#if DELTA_RELAY_ENABLE
+	const float speed_kmh = VescToSTM_get_speed() * 3.6f;
+
+	if(delta_state == DELTA_STATE_IDLE) {
+		bool desired = delta_active;
+
+		if(!delta_active && speed_kmh >= DELTA_ENTER_SPEED_KMH) {
+			desired = true;
+		} else if(delta_active && speed_kmh <= DELTA_EXIT_SPEED_KMH) {
+			desired = false;
+		}
+
+		if(desired != delta_active) {
+			delta_target = desired;
+			delta_coast_required = true;
+			delta_state = DELTA_STATE_WAIT_ZERO;
+		}
+	}
+
+	if(delta_state == DELTA_STATE_WAIT_ZERO) {
+		delta_coast_required = true;
+
+		if(fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
+			delta_write_output(delta_target);
+			delta_active = delta_target;
+			delta_settle_until = xTaskGetTickCount() + MS_TO_TICKS(DELTA_RELAY_SETTLE_MS);
+			delta_state = DELTA_STATE_SETTLE;
+		}
+	} else if(delta_state == DELTA_STATE_SETTLE) {
+		delta_coast_required = true;
+
+		if((int32_t)(xTaskGetTickCount() - delta_settle_until) >= 0) {
+			delta_coast_required = false;
+			delta_state = DELTA_STATE_IDLE;
+		}
+	}
+#endif
+}
+#else
+bool task_delta_coast_required(void) {
+	return false;
+}
+
+bool task_delta_is_active(void) {
+	return false;
+}
+#endif
 
 void prv_LED_blink(uint32_t speed){
 	static uint16_t cnt=0;
@@ -50,6 +132,10 @@ void prv_LED_blink(uint32_t speed){
 	}
 
 
+#ifdef G30P
+	(void)brake_cnt;
+	prv_delta_update();
+#else
 	if(VescToSTM_mode == STM_STATE_BRAKE && (FW_M1.AvAmpere_qd.q < (-1*CURRENT_FACTOR_A) || FW_M1.AvAmpere_qd.q > (1*CURRENT_FACTOR_A))){
 		if(brake_cnt>10){
 			brake_cnt=0;
@@ -66,6 +152,7 @@ void prv_LED_blink(uint32_t speed){
 			brake_cnt=0;
 		}
 	}
+#endif
 
 
 }
@@ -126,5 +213,9 @@ void task_LED(void * argument)
 }
 
 void task_LED_init(port_str * port){
+#ifdef G30P
+	/* Always boot in STAR. */
+	delta_write_output(false);
+#endif
 	xTaskCreate(task_LED, "tskLED", 128, (void*)port, PRIO_NORMAL, &LEDHandle);
 }

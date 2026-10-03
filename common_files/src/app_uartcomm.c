@@ -31,6 +31,7 @@
 #include "ninebot.h"
 #include "VescCommand.h"
 #include "task_init.h"
+#include "task_LED.h"
 #include "timers.h"
 #include <math.h>
 
@@ -176,6 +177,16 @@ void vTimerCallback( TimerHandle_t xTimer ){
 	// Apply throttle curve
 	pwr = utils_throttle_curve(pwr, config.throttle_exp, config.throttle_exp_brake, config.throttle_exp_mode);
 
+#if defined(G30P) && SESC_NO_REGEN
+	/*
+	 * Physical brake is a motor cut/coast input on this build.
+	 * Never turn a brake request into negative torque.
+	 */
+	if(brake > 0.0f || pwr < 0.0f) {
+		pwr = 0.0f;
+	}
+#endif
+
 	// Apply ramping
 	static uint32_t last_time = 0;
 	static float pwr_ramp = 0.0;
@@ -187,6 +198,27 @@ void vTimerCallback( TimerHandle_t xTimer ){
 		last_time = xTaskGetTickCount();
 		pwr = pwr_ramp;
 	}
+
+#if defined(G30P) && SESC_NO_REGEN
+	/* Brake must cut propulsion immediately, without regenerative torque. */
+	if(brake > 0.0f) {
+		pwr_ramp = 0.0f;
+		pwr = 0.0f;
+	}
+#endif
+
+#ifdef G30P
+	/*
+	 * STAR/DELTA transition owns the motor for a short window:
+	 * coast to near-zero Iq, switch the relays, wait for contact settling,
+	 * then let the normal positive-current ramp take over again.
+	 */
+	if(task_delta_coast_required()) {
+		pwr_ramp = 0.0f;
+		VescToSTM_set_current_rel(0.0f);
+		return;
+	}
+#endif
 
 	if(app_is_output_disabled()){
 		return;
@@ -200,18 +232,30 @@ void vTimerCallback( TimerHandle_t xTimer ){
 		break;
 
 	case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_CENTER:
+#if defined(G30P) && SESC_NO_REGEN
+		VescToSTM_set_current_rel(pwr > 0.0f ? pwr : 0.0f);
+#else
 		if(pwr>=0){
 			VescToSTM_set_current_rel(pwr);
 		}else{
 			VescToSTM_set_brake_current_rel(pwr);
 		}
+#endif
 		break;
 	case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC:
+#if defined(G30P) && SESC_NO_REGEN
+		if(brake > 0.0f){
+			VescToSTM_set_current_rel(0.0f);
+		}else{
+			VescToSTM_set_current_rel(pwr > 0.0f ? pwr : 0.0f);
+		}
+#else
 		if(brake>0){
 			VescToSTM_set_brake_current_rel(brake);
 		}else if(pwr>=0){
 			VescToSTM_set_current_rel(pwr);
 		}
+#endif
 
 		break;
 

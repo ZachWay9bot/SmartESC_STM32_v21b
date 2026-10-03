@@ -133,11 +133,13 @@ void task_PWR(void *argument) {
 			  case NO_PRESS : break ;
 			  case SINGLE_PRESS : {
 				  m365_to_display.light = !m365_to_display.light;
+#ifndef G30P
 				  if(m365_to_display.light){
 					  task_LED_set_brake_light(BRAKE_LIGHT_ON);
 				  }else{
 					  task_LED_set_brake_light(BRAKE_LIGHT_OFF);
 				  }
+#endif
 
 			  } break ;
 			  case LONG_PRESS :   {
