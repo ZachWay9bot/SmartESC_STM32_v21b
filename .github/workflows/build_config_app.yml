@@ -1,4 +1,4 @@
-name: Build SmartESC Config APK
+name: Build DeltaESC Config APK
 
 on:
   workflow_dispatch:
@@ -42,7 +42,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartESC-Config-Android-${{ github.run_number }}
+          name: DeltaESC-Config-Android-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
           path: android/SmartESCConfig/app/build/outputs/apk/debug/app-debug.apk
