@@ -25,6 +25,8 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
     private TextView status, stockDiag, live, detectStatus;
     private Button connect;
+    private Button readButton, applyButton, saveButton;
+    private Button detectStarButton, detectDeltaButton, rereadButton;
 
     private EditText battA, wheelMm, poles, enterKmh, exitKmh, switchIq, settleMs, detectLoss;
     private CheckBox autoDelta;
@@ -105,12 +107,12 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        Button read = button("READ", v -> readAll());
-        Button apply = button("APPLY RAM", v -> applyAll());
-        Button save = button("SAVE FLASH", v -> saveAll());
-        row.addView(read,new LinearLayout.LayoutParams(0,wrap(),1));
-        row.addView(apply,new LinearLayout.LayoutParams(0,wrap(),1));
-        row.addView(save,new LinearLayout.LayoutParams(0,wrap(),1));
+        readButton = button("READ", v -> readAll());
+        applyButton = button("APPLY RAM", v -> applyAll());
+        saveButton = button("SAVE FLASH", v -> saveAll());
+        row.addView(readButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        row.addView(applyButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        row.addView(saveButton,new LinearLayout.LayoutParams(0,wrap(),1));
         root.addView(row);
 
         section(root,"Motor Setup");
@@ -119,12 +121,16 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
         LinearLayout detectRow = new LinearLayout(this);
         detectRow.setOrientation(LinearLayout.HORIZONTAL);
-        detectRow.addView(button("DETECT STAR",v -> confirmDetect(false)),new LinearLayout.LayoutParams(0,wrap(),1));
-        detectRow.addView(button("DETECT DELTA",v -> confirmDetect(true)),new LinearLayout.LayoutParams(0,wrap(),1));
+        detectStarButton = button("DETECT STAR",v -> confirmDetect(false));
+        detectDeltaButton = button("DETECT DELTA",v -> confirmDetect(true));
+        detectRow.addView(detectStarButton,new LinearLayout.LayoutParams(0,wrap(),1));
+        detectRow.addView(detectDeltaButton,new LinearLayout.LayoutParams(0,wrap(),1));
         root.addView(detectRow);
 
-        Button reread = button("Profile nach Setup neu laden",v -> readProfiles());
-        root.addView(reread);
+        rereadButton = button("Profile nach Setup neu laden",v -> readProfiles());
+        root.addView(rereadButton);
+
+        updateDeltaControls(false);
 
         section(root,"Hinweis");
         root.addView(text("Änderungen werden zuerst nur im RAM angewendet. Erst SAVE FLASH schreibt dauerhaft. Die Firmware akzeptiert kritische Änderungen und Motor-Setup nur im Stillstand.",13,false));
@@ -194,6 +200,15 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         } else {
             stockDiag.setText(bleState + " · ESC bridge: teste…");
         }
+    }
+
+    private void updateDeltaControls(boolean enabled) {
+        if (readButton != null) readButton.setEnabled(enabled);
+        if (applyButton != null) applyButton.setEnabled(enabled);
+        if (saveButton != null) saveButton.setEnabled(enabled);
+        if (detectStarButton != null) detectStarButton.setEnabled(enabled);
+        if (detectDeltaButton != null) detectDeltaButton.setEnabled(enabled);
+        if (rereadButton != null) rereadButton.setEnabled(enabled);
     }
 
     private void readAll() {
@@ -292,6 +307,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
 
             status.setText(encrypted ? "Verbunden · Ninebot Crypto" : "Verbunden · Plain/Legacy");
             connect.setText("Neu verbinden");
+            updateDeltaControls(false);
             handler.removeCallbacks(poll);
 
             // First prove the stock App -> BLE -> dashboard -> ESC path.
@@ -349,6 +365,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
                     status.setText("DeltaESC erkannt · Protocol v"+ver+
                             " · flags 0x"+Integer.toHexString(flags));
                     updateDiagnosticText();
+                    updateDeltaControls(true);
 
                     if (firstHello) {
                         readAll();
@@ -430,6 +447,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
             stockDrv = "--";
             stockSerial = "--";
             if (stockDiag != null) stockDiag.setText("BLE: -- · ESC bridge: --");
+            updateDeltaControls(false);
             connect.setText("G30 suchen & verbinden");
         });
     }
