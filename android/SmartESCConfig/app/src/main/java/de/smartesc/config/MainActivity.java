@@ -49,7 +49,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         root.setPadding(dp(16),dp(12),dp(16),dp(30));
         scroll.addView(root);
 
-        TextView title = text("SmartESC Config",24,true);
+        TextView title = text("DeltaESC Config",24,true);
         root.addView(title);
         root.addView(text("G30D · SHU-Lite · STAR/DELTA Setup",14,false));
 
@@ -246,7 +246,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
                 if (f.payload.length >= 5) {
                     int ver=SescProtocol.u8(f.payload[0]);
                     int flags=SescProtocol.u8(f.payload[1]);
-                    status.setText("SmartESC Config v"+ver+" · flags 0x"+Integer.toHexString(flags));
+                    status.setText("DeltaESC Config v"+ver+" · flags 0x"+Integer.toHexString(flags));
                 }
                 break;
             case SescProtocol.TELEMETRY: {
