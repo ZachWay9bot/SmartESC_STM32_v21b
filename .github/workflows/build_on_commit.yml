@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   # Triggers the workflow on push or pull request events
   push:
-    branches: [ vesc_comp, feature/shu-coast-delta, feature/g30-config-app ]
+    branches: [ vesc_comp, feature/shu-coast-delta, feature/g30-config-app, feature/deltaesc-branding ]
   pull_request:
     branches: [ vesc_comp ]
     
