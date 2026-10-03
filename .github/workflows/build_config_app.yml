@@ -1,4 +1,4 @@
-name: Build SmartESC Config APK
+name: Build DeltaESC Config APK
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
       - 'android/SmartESCConfig/**'
       - '.github/workflows/build_config_app.yml'
   push:
-    branches: [ feature/g30-config-app ]
+    branches: [ feature/g30-config-app, feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03 ]
     paths:
       - 'android/SmartESCConfig/**'
       - '.github/workflows/build_config_app.yml'
@@ -37,12 +37,14 @@ jobs:
         run: gradle -p android/SmartESCConfig :app:testDebugUnitTest --no-daemon
 
       - name: Build debug APK
-        run: gradle -p android/SmartESCConfig :app:assembleDebug --no-daemon
+        run: |
+          gradle -p android/SmartESCConfig :app:assembleDebug --no-daemon
+          cp android/SmartESCConfig/app/build/outputs/apk/debug/app-debug.apk DeltaESC_Config_v0.2.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: SmartESC-Config-Android-${{ github.run_number }}
+          name: DeltaESC-Config-Android-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
-          path: android/SmartESCConfig/app/build/outputs/apk/debug/app-debug.apk
+          path: DeltaESC_Config_v0.2.apk
