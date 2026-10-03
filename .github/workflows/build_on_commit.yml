@@ -44,15 +44,15 @@ jobs:
       run: |
         python3 tools/make_shu_zip.py \
           "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
-          "${{ github.workspace }}/SmartESC_G30_SHU_Config_DualProfile.zip"
+          "${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip"
 
     - name: 'Upload Artifact G30P + SHU package'
       uses: actions/upload-artifact@v4
       with:
         path: |
           ${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin
-          ${{ github.workspace }}/SmartESC_G30_SHU_Config_DualProfile.zip
-        name: g30p-config-shu-${{ github.run_number }}
+          ${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip
+        name: DeltaESC-G30D-v0.2-${{ github.run_number }}
         retention-days: 5
 
     - name: 'Build M365 regression target'
