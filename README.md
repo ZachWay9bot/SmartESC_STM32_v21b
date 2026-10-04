@@ -1,5 +1,16 @@
 # DeltaESC
 
+> [!CAUTION]
+> ## UNVALIDATED G30 HARDWARE TEST BUILD
+>
+> **The G30/DeltaESC motor-control firmware is NOT yet 100% validated on real G30 power hardware. Do not blindly install or flash this firmware on a controller that you cannot recover with ST-Link/SWD.**
+>
+> A successful compile, CI run, BLE connection, stock-ESC diagnostic or bench test does **not** count as complete validation of the motor-control firmware. Real-controller validation is still required for sensored FOC startup and running under load, current measurement/scaling, fault handling, SHU rollback/recovery, BMS behavior and any STAR/DELTA functionality.
+>
+> Until these tests have been completed successfully on real hardware, this repository must be treated as **experimental / hardware-test only**. Keep **ST-Link/SWD access and a verified full 128 KiB flash backup** available.
+>
+> **Blind installation on a daily-use or non-recoverable G30 controller is explicitly discouraged.**
+
 **DeltaESC is a G30D-focused motor-controller firmware based heavily on SmartESC by Koxx3.**
 
 Upstream project: [Koxx3/SmartESC_STM32_v2](https://github.com/Koxx3/SmartESC_STM32_v2)
