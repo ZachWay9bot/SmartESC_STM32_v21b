@@ -694,10 +694,10 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(REAR_LED_GPIO_Port, REAR_LED_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PWR_BTN_Pin */
+  /*Configure GPIO pin : PWR_BTN_Pin (G30 Gen1: PA12, active-low) */
   GPIO_InitStruct.Pin = PWR_BTN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(PWR_BTN_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : UNUSED4_Pin */
