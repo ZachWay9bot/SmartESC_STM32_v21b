@@ -39,7 +39,12 @@
 
 #define SCOPE_UVW															 0
 
-#define POLE_PAIR_NUM                                                 	 	 (uint8_t)14
+/*
+ * The original g30p Motor Control Workbench definition specifies 15 pole
+ * pairs. The old shared product header said 14, which also disagrees with
+ * known stock-G30 VESC setups and skews mechanical speed/odometer conversion.
+ */
+#define POLE_PAIR_NUM                                                 	 	 (uint8_t)15
 #define HALL_PHASE_SHIFT        											 90
 #define HALL_SENSORS_PLACEMENT  											 DEGREES_120
 #define HALL_FAULT_RESET_CNT												 200
