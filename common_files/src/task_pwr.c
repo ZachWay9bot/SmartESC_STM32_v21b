@@ -45,20 +45,33 @@ extern m365Answer m365_to_display;
 uint32_t shutdown_limit = 0;
 
 uint8_t buttonState() {
-    static const uint32_t DEBOUNCE_MILLIS = 20 ;
-    bool buttonstate = HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_SET ;
-    uint32_t buttonstate_ts = HAL_GetTick() ;
+    static const uint32_t DEBOUNCE_MILLIS = 20u;
+    static bool initialized = false;
+    static GPIO_PinState last_raw = GPIO_PIN_SET;
+    static bool stable_pressed = false;
+    static uint32_t changed_ts = 0u;
 
-    uint32_t now = HAL_GetTick() ;
-    if( now - buttonstate_ts > DEBOUNCE_MILLIS )
-    {
-        if( buttonstate != (HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_SET))
-        {
-            buttonstate = !buttonstate ;
-            buttonstate_ts = now ;
-        }
+    const GPIO_PinState raw = HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port, PWR_BTN_Pin);
+    const uint32_t now = HAL_GetTick();
+
+    if(!initialized) {
+        initialized = true;
+        last_raw = raw;
+        stable_pressed = (raw == GPIO_PIN_RESET);
+        changed_ts = now;
     }
-    return buttonstate ;
+
+    if(raw != last_raw) {
+        last_raw = raw;
+        changed_ts = now;
+    }
+
+    if((uint32_t)(now - changed_ts) >= DEBOUNCE_MILLIS) {
+        /* G30 Gen1 power-button line is pulled up and pressed active-low. */
+        stable_pressed = (last_raw == GPIO_PIN_RESET);
+    }
+
+    return stable_pressed ? 1u : 0u;
 }
 
 eButtonEvent getButtonEvent()
@@ -157,7 +170,7 @@ void task_PWR(void *argument) {
 				   */
 				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
 					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
-					  HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
 					  VescToSTM_pwm_stop();
 					  if(app_shu_invalidate_app_vector()) {
 						  __disable_irq();
