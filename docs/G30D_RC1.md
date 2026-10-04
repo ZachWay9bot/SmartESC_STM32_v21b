@@ -61,3 +61,9 @@ STAR/DELTA hardware physically held in STAR.
 Do not raise current limits or enable field weakening during the initial RC
 validation. The purpose of RC1 is to prove the hardware mapping, control path,
 configuration path, and recovery path before performance tuning.
+
+## CI release gate
+
+The RC is publishable only when the G30P build, M365 regression build, SHU
+preflight/package validation, and Android protocol tests/APK build all pass from
+the same source revision.
