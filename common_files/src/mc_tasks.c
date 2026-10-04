@@ -555,7 +555,23 @@ __weak void FOC_CalcCurrRef(uint8_t bMotor)
     }*/
 
     //Battery Curren limit -- START
-    int32_t batt_i = (int32_t)((int32_t)FOCVars[bMotor].Iqdref.q * (int32_t)FW_M1.AvVolt_qd.q) / 32768;
+    /*
+     * The ST Clarke/Park implementation is amplitude invariant:
+     * P = 3/2 * (Vq*Iq + Vd*Id). In the normal Hall-FOC bring-up Id is
+     * approximately zero, so converting q-axis power to battery-current
+     * counts needs 65536/1.5 = 43690.7, not 32768. The old divisor made
+     * the estimated battery current 4/3 too high and caused the limiter to
+     * intervene at roughly 75% of the configured value.
+     *
+     * Keep the legacy scale on other hardware targets; this candidate is
+     * intentionally scoped to the G30 validation path.
+     */
+#if defined(G30P) && G30_SENSORED_BRINGUP
+    const int32_t batt_i_scale = 43691;
+#else
+    const int32_t batt_i_scale = 32768;
+#endif
+    int32_t batt_i = (int32_t)((int32_t)FOCVars[bMotor].Iqdref.q * (int32_t)FW_M1.AvVolt_qd.q) / batt_i_scale;
     batt_i = abs(batt_i);
     int16_t q_temp = FOCVars[bMotor].Iqdref.q;
 
@@ -567,11 +583,11 @@ __weak void FOC_CalcCurrRef(uint8_t bMotor)
     }
     if(regen){
     	if((-batt_i < FOCVars[bMotor].min_i_batt) ){
-    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].min_i_batt * 32768) / (int32_t)FW_M1.AvVolt_qd.q;
+    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].min_i_batt * batt_i_scale) / (int32_t)FW_M1.AvVolt_qd.q;
     	}
     }else{
     	if((batt_i > FOCVars[bMotor].max_i_batt) ){
-    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].max_i_batt * 32768) / (int32_t)FW_M1.AvVolt_qd.q;
+    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].max_i_batt * batt_i_scale) / (int32_t)FW_M1.AvVolt_qd.q;
     	}
     }
 
