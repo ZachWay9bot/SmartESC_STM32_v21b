@@ -482,6 +482,11 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 	VescToSTM_init_odometer(mcconf);
 	mc_conf = *mcconf;
 
+#if defined(G30P) && G30_SENSORED_BRINGUP
+	/* Preserve ECO/DRIVE current scaling across live configuration writes. */
+	app_adc_apply_mode_scale();
+#endif
+
 }
 
 void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float tc) {
@@ -702,12 +707,22 @@ bool g30_config_profile_valid(bool delta) {
 }
 
 bool g30_config_auto_delta_enabled(void) {
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	return false;
+#else
 	return (g30_cfg.flags & G30_CFG_FLAG_AUTO_DELTA) != 0u &&
 			g30_config_profile_valid(false) &&
 			g30_config_profile_valid(true);
+#endif
 }
 
 bool g30_config_apply_runtime_profile(bool delta) {
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	/* STAR-only validation means DELTA profiles must never become live. */
+	if(delta) {
+		return false;
+	}
+#endif
 	if(!g30_config_profile_valid(delta)) {
 		return false;
 	}
@@ -729,9 +744,21 @@ bool g30_config_apply_runtime_profile(bool delta) {
 	mc_conf.lo_in_current_max = mc_conf.l_in_current_max;
 	mc_conf.lo_in_current_min = mc_conf.l_in_current_min;
 
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	const float foc_cc_gain_scale =
+		65536.0f / ((float)NOMINAL_BUS_VOLTAGE_V * (float)CURRENT_FACTOR_A);
+	float runtime_kp = mc_conf.foc_current_kp * foc_cc_gain_scale * (float)TF_KPDIV;
+	float runtime_ki = mc_conf.foc_current_ki * foc_cc_gain_scale *
+		(float)TF_KIDIV / (float)mc_conf.foc_f_sw;
+	utils_truncate_number(&runtime_kp, 0.0f, (float)INT16_MAX);
+	utils_truncate_number(&runtime_ki, 0.0f, (float)INT16_MAX);
+	PIDIqHandle_M1.hKpGain = (int16_t)runtime_kp;
+	PIDIqHandle_M1.hKiGain = (int16_t)runtime_ki;
+#else
 	PIDIqHandle_M1.hKpGain = mc_conf.foc_current_kp * (float)TF_KPDIV;
 	PIDIqHandle_M1.hKiGain =
 			mc_conf.foc_current_ki * (float)TF_KIDIV / (float)mc_conf.foc_f_sw;
+#endif
 	PIDIqHandle_M1.hDefKpGain = PIDIqHandle_M1.hKpGain;
 	PIDIqHandle_M1.hDefKiGain = PIDIqHandle_M1.hKiGain;
 
