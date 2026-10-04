@@ -29,6 +29,12 @@ def require_text(path: Path, needle: str) -> None:
         raise AssertionError(f"{path}: missing expected text: {needle}")
 
 
+def forbid_text(path: Path, needle: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    if needle in text:
+        raise AssertionError(f"{path}: forbidden text still present: {needle}")
+
+
 def checksum16(data: bytes) -> int:
     total = sum(data) & 0xFFFF
     return (~total) & 0xFFFF
@@ -107,6 +113,52 @@ def test_g30_config_protocol() -> None:
     require_text(delta, "cfg->relay_settle_ms")
 
 
+
+def test_g30_gen1_rc_safety() -> None:
+    main_h = ROOT / "g30p" / "Inc" / "main.h"
+    main_c = ROOT / "g30p" / "Src" / "main.c"
+    product = ROOT / "common_files" / "inc" / "product.h"
+    app_uart = ROOT / "common_files" / "src" / "app_uartcomm.c"
+    pwr = ROOT / "common_files" / "src" / "task_pwr.c"
+    conf = ROOT / "common_files" / "src" / "conf_general.c"
+
+    # G30 Gen1 hardware mapping reconstructed from stock DRV firmware.
+    require_text(main_h, "#define PWR_BTN_Pin GPIO_PIN_12")
+    require_text(main_h, "#define PWR_BTN_GPIO_Port GPIOA")
+    require_text(main_c, "GPIO_InitStruct.Pull = GPIO_PULLUP;")
+    require_text(product, "#define DELTA_RELAY_GPIO_Port")
+    require_text(product, "LED_GPIO_Port")
+    require_text(product, "#define DELTA_RELAY_Pin")
+    require_text(product, "LED_Pin")
+
+    # Both recovery paths must force STAR on PA15, never on legacy PB9.
+    require_text(
+        app_uart,
+        "HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);",
+    )
+    require_text(
+        pwr,
+        "HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);",
+    )
+    forbid_text(
+        app_uart,
+        "HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);",
+    )
+
+    # Active-low G30 power button must not block shutdown waiting for a press.
+    require_text(pwr, "#ifdef G30P")
+    require_text(
+        pwr,
+        "HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_RESET);",
+    )
+    require_text(pwr, "stable_pressed = (last_raw == GPIO_PIN_RESET);")
+
+    # RC remains sensored-only and automatic DELTA starts disabled.
+    require_text(conf, "mcconf->foc_sensor_mode = FOC_SENSOR_MODE_HALL;")
+    require_text(conf, "g30_cfg.flags = 0;")
+
+
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -182,6 +234,7 @@ def main() -> int:
     test_layout()
     test_bms_activator_source()
     test_g30_config_protocol()
+    test_g30_gen1_rc_safety()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")
