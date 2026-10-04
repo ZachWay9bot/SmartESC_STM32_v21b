@@ -72,8 +72,8 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define PWR_BTN_Pin GPIO_PIN_14
-#define PWR_BTN_GPIO_Port GPIOC
+#define PWR_BTN_Pin GPIO_PIN_12
+#define PWR_BTN_GPIO_Port GPIOA
 #define UNUSED4_Pin GPIO_PIN_15
 #define UNUSED4_GPIO_Port GPIOC
 #define UNUSED3_Pin GPIO_PIN_0
@@ -112,8 +112,8 @@ void Error_Handler(void);
 #define M1_PWM_WH_GPIO_Port GPIOA
 #define TPS_ENA_Pin GPIO_PIN_11
 #define TPS_ENA_GPIO_Port GPIOA
-#define UNUSED1_Pin GPIO_PIN_12
-#define UNUSED1_GPIO_Port GPIOA
+#define UNUSED1_Pin GPIO_PIN_14
+#define UNUSED1_GPIO_Port GPIOC
 #define LED_Pin GPIO_PIN_15
 #define LED_GPIO_Port GPIOA
 #define M1_HALL_H1_Pin GPIO_PIN_4
