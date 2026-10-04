@@ -124,6 +124,20 @@ During a live configuration change this could kill the newly started ADC/display
 task and replace it with the CLI task on the shared UART. v0.1 adds the missing
 `break`.
 
+### 6. Drive-mode current-scale persistence
+
+SmartESC resets the runtime `lo_current_max_scale` to 1.0 while applying a motor
+configuration. v0.1 immediately restores the current scale for the selected
+ECO/Drive/Sport dashboard mode, so a configuration write cannot silently turn a
+reduced-current mode into full-current behavior.
+
+### 7. STAR-only runtime interlocks
+
+In addition to disabling the relay state machine, v0.1 makes
+`g30_config_auto_delta_enabled()` return false during sensored bring-up and
+rejects any attempt to apply a DELTA runtime profile. The runtime-profile PI path
+uses the same corrected SI-to-ST-count gain conversion as the normal setup path.
+
 ## First hardware-validation sequence
 
 Use ST-Link/SWD recovery and keep a verified full 128 KiB flash backup.
