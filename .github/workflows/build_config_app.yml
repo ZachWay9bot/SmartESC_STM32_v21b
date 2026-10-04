@@ -13,6 +13,7 @@ on:
     paths:
       - 'android/SmartESCConfig/**'
       - '.github/workflows/build_config_app.yml'
+      - 'docs/G30D_RC1.md'
 
 jobs:
   android:
@@ -48,4 +49,4 @@ jobs:
           name: DeltaESC-Config-v0.3-RC1-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
-          path: DeltaESC_Config_v0.2.1_diag.apk
+          path: DeltaESC_Config_v0.3.0_RC1.apk
