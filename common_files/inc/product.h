@@ -56,8 +56,8 @@
 
 /*
  * G30 custom ride behaviour.
- * Rear LED output is repurposed as the external STAR/DELTA relay control.
- * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
+ * The former tail-light control PA15 is dedicated to the external STAR/DELTA
+ * interface. Fail-safe command: GPIO low = STAR, GPIO high = DELTA request.
  */
 #define SESC_NO_REGEN                                                       1
 #define DELTA_RELAY_ENABLE                                                  1

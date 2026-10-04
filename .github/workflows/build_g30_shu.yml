@@ -2,18 +2,20 @@ name: Build DeltaESC G30D SHU candidate
 
 on:
   push:
-    branches: [ feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03, candidate/g30-gen1-hwfix-v0.3 ]
+    branches: [ feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03, candidate/g30-gen1-hwfix-v0.3, release-candidate/deltaesc-g30d-rc1 ]
     paths:
       - 'g30p/**'
       - 'common_files/**'
       - 'tools/make_shu_zip.py'
+      - 'tools/test_shu_preflight.py'
+      - 'docs/G30D_RC1.md'
       - '.github/workflows/build_g30_shu.yml'
   workflow_dispatch:
     inputs:
       ref:
         description: Branch or commit to build
         required: true
-        default: feature/g30-config-app
+        default: release-candidate/deltaesc-g30d-rc1
   pull_request:
     branches: [ vesc_comp ]
     paths:
@@ -36,6 +38,9 @@ jobs:
         if: github.event_name != 'workflow_dispatch'
         uses: actions/checkout@v4
 
+      - name: SHU source preflight
+        run: python3 tools/test_shu_preflight.py
+
       - name: Build G30P
         uses: docker://wsbu/stm32cubeide:latest
         with:
@@ -49,8 +54,8 @@ jobs:
           test -s "$BIN"
           python3 tools/make_shu_zip.py \
             "$BIN" \
-            "${{ github.workspace }}/DeltaESC_G30D_v0.3_SHU.zip"
-          cp "$BIN" "${{ github.workspace }}/DeltaESC_G30D_v0.3.bin"
+            "${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1_SHU.zip"
+          cp "$BIN" "${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1.bin"
           python3 - <<'PY'
           import struct
           from pathlib import Path
@@ -67,11 +72,11 @@ jobs:
       - name: Upload G30 SHU candidate
         uses: actions/upload-artifact@v4
         with:
-          name: DeltaESC-G30D-v0.3-SHU-${{ github.run_number }}
+          name: DeltaESC-G30D-v0.3-RC1-SHU-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 30
           path: |
-            DeltaESC_G30D_v0.3.bin
-            DeltaESC_G30D_v0.3_SHU.zip
+            DeltaESC_G30D_v0.3_RC1.bin
+            DeltaESC_G30D_v0.3_RC1_SHU.zip
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map

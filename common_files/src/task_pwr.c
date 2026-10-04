@@ -227,12 +227,20 @@ void power_control(uint8_t pwr)
 		 */
 		HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_SET);
 	} else if(pwr == DEV_PWR_OFF) {
-
+#ifdef G30P
+		/*
+		 * G30 Gen1 PA12 is active-low while PA11 is the power-hold output.
+		 * Drop the hold line immediately. Waiting while PA12 is high would
+		 * deadlock an inactivity shutdown until somebody presses the button.
+		 */
+		HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_RESET);
+		while(1) { }
+#else
 		vTaskDelay(1);
-
 		while(HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port, PWR_BTN_Pin));
 		HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_RESET);
 		while(1);
+#endif
 	} else if(pwr == DEV_PWR_RESTART) {
 
 		/* Restart the system */

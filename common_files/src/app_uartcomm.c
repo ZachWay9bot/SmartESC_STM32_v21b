@@ -233,7 +233,7 @@ static void shu_handoff_to_stock_iap(void) {
 	}
 
 	/* Fail-safe STAR and high-Z inverter before committing to IAP recovery. */
-	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
 	VescToSTM_pwm_stop();
 	vTaskDelay(MS_TO_TICKS(10));
 

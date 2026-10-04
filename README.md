@@ -10,6 +10,24 @@
 > First hardware tests should only be performed by experienced users with **ST-Link/SWD access and a verified full 128 KiB flash backup**. Until those tests are complete, installation on a daily-use or non-recoverable controller is explicitly discouraged.
 
 
+## Current release candidate: G30D v0.3 RC1
+
+Source branch: `release-candidate/deltaesc-g30d-rc1`.
+
+RC1 is based on the frozen v0.3 G30 Gen1 pin-fix and adds release hardening for
+the SHU recovery path and active-low G30 power-off behavior. It remains
+**hardware-unvalidated for motor operation**, so the caution above still applies.
+
+- PA12 active-low power button; PA11 power hold
+- PA15 dedicated STAR/DELTA output; PB9 is not used for topology switching
+- SHU/IAP handoff forces STAR on PA15 before PWM-off/reset
+- sensored-only G30 motor path
+- automatic STAR/DELTA disabled until both profiles are valid
+- CI/preflight regression checks for the G30 Gen1 mappings and recovery path
+- Android DeltaESC Config v0.3.0-rc1 built from the same RC branch
+
+Validation procedure: [G30D v0.3 RC1](docs/G30D_RC1.md)
+
 **DeltaESC is a G30D-focused motor-controller firmware based heavily on SmartESC by Koxx3.**
 
 Upstream project: [Koxx3/SmartESC_STM32_v2](https://github.com/Koxx3/SmartESC_STM32_v2)

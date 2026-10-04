@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
   # Triggers the workflow on push or pull request events
   push:
-    branches: [ vesc_comp, feature/shu-coast-delta, feature/g30-config-app, feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03, candidate/g30-gen1-hwfix-v0.3 ]
+    branches: [ vesc_comp, feature/shu-coast-delta, feature/g30-config-app, feature/deltaesc-branding, freeze/deltaesc-v0.2-hwtest-2026-10-03, candidate/g30-gen1-hwfix-v0.3, release-candidate/deltaesc-g30d-rc1 ]
   pull_request:
     branches: [ vesc_comp ]
     
@@ -43,18 +43,18 @@ jobs:
     - name: 'Package G30P for SHU'
       run: |
         cp "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
-          "${{ github.workspace }}/DeltaESC_G30D_v0.3.bin"
+          "${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1.bin"
         python3 tools/make_shu_zip.py \
           "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
-          "${{ github.workspace }}/DeltaESC_G30D_v0.3_SHU.zip"
+          "${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1_SHU.zip"
 
     - name: 'Upload Artifact G30P + SHU package'
       uses: actions/upload-artifact@v4
       with:
         path: |
-          ${{ github.workspace }}/DeltaESC_G30D_v0.3.bin
-          ${{ github.workspace }}/DeltaESC_G30D_v0.3_SHU.zip
-        name: DeltaESC-G30D-v0.3-${{ github.run_number }}
+          ${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1.bin
+          ${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1_SHU.zip
+        name: DeltaESC-G30D-v0.3-RC1-${{ github.run_number }}
         retention-days: 5
 
     - name: 'Build M365 regression target'
