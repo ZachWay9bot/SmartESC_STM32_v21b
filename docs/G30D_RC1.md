@@ -66,4 +66,4 @@ configuration path, and recovery path before performance tuning.
 
 The RC is publishable only when the G30P build, M365 regression build, SHU
 preflight/package validation, and Android protocol tests/APK build all pass from
-the same source revision.
+the same source revision. PR #7 is the integration gate for this exact RC source.
