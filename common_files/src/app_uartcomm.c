@@ -567,6 +567,16 @@ fail:
 }
 
 static bool sesc_cfg_start_detect(bool delta, uint16_t power_loss_w) {
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	/*
+	 * First hardware validation is deliberately manual: verify Hall sequence,
+	 * current offsets/scaling and low-current sensored FOC before any automatic
+	 * R/L/flux or DELTA setup routine is allowed to energise the motor.
+	 */
+	(void)delta;
+	(void)power_loss_w;
+	return false;
+#else
 	if(sesc_detect_task_handle != NULL ||
 	   !sesc_cfg_stationary() ||
 	   power_loss_w < 20u || power_loss_w > 500u ||
@@ -582,6 +592,7 @@ static bool sesc_cfg_start_detect(bool delta, uint16_t power_loss_w) {
 
 	return xTaskCreate(sesc_detect_task, "SESC-DET", 320, NULL,
 			PRIO_NORMAL, &sesc_detect_task_handle) == pdPASS;
+#endif
 }
 
 static void sesc_cfg_handle_packet(port_str *port) {
