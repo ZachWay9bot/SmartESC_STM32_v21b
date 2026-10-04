@@ -75,6 +75,17 @@ bool task_delta_is_active(void) {
 }
 
 bool task_delta_setup_force(bool delta) {
+#if !DELTA_RELAY_ENABLE
+	(void)delta;
+	/* Hard safety interlock for sensored STAR-only bring-up. */
+	delta_write_output(false);
+	delta_active = false;
+	delta_target = false;
+	delta_setup_override = false;
+	delta_coast_required = false;
+	delta_state = DELTA_STATE_IDLE;
+	return false;
+#else
 	/*
 	 * Caller must already have torque at zero and PWM disabled. Setup mode
 	 * suppresses automatic speed-based switching while R/L/flux are measured.
@@ -94,6 +105,7 @@ bool task_delta_setup_force(bool delta) {
 	 */
 	(void)g30_config_apply_runtime_profile(delta);
 	return true;
+#endif
 }
 
 void task_delta_setup_release(void) {
