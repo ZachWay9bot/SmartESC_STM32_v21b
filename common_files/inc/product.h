@@ -48,6 +48,13 @@
 #define BRAKE_LIGHT_Pin														 REAR_LED_Pin
 
 /*
+ * G30 Gen1 stock hardware map: PA15 is the tail-light control output while
+ * PB9 is the buzzer output. STAR/DELTA therefore uses PA15 directly.
+ */
+#define DELTA_RELAY_GPIO_Port                                                LED_GPIO_Port
+#define DELTA_RELAY_Pin                                                      LED_Pin
+
+/*
  * G30 custom ride behaviour.
  * Rear LED output is repurposed as the external STAR/DELTA relay control.
  * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
