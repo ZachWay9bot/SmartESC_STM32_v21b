@@ -270,7 +270,7 @@ void conf_general_mcconf_hw_limits(mc_configuration *mcconf) {
 #endif
 #ifdef HW_LIM_CURRENT_IN
 	utils_truncate_number(&mcconf->l_in_current_max, HW_LIM_CURRENT_IN);
-	utils_truncate_number(&mcconf->l_in_current_min, HW_LIM_CURRENT);
+	utils_truncate_number(&mcconf->l_in_current_min, HW_LIM_CURRENT_IN);
 #endif
 #ifdef HW_LIM_CURRENT_ABS
 	utils_truncate_number(&mcconf->l_abs_current_max, HW_LIM_CURRENT_ABS);
@@ -349,6 +349,19 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 }
 
 void conf_general_setup_mc(mc_configuration *mcconf) {
+
+#if defined(G30P) && G30_SENSORED_BRINGUP
+	/*
+	 * Hardware-test candidate safety envelope. A persisted VESC configuration
+	 * can contain override_limits=true, which would normally bypass
+	 * conf_general_mcconf_hw_limits(). That is unacceptable for first power-on.
+	 * Force the override off and clamp the live configuration before any
+	 * controller gains, torque limits or ADC thresholds are derived from it.
+	 */
+	mcconf->override_limits = false;
+	conf_general_mcconf_hw_limits(mcconf);
+	mcconf->foc_fw_current_max = 0.0f;
+#endif
 
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
 
@@ -652,7 +665,11 @@ bool g30_config_set_profile(bool delta, const g30_foc_profile_t *profile) {
 	   profile->r_ohm <= 0.00001f || profile->r_ohm > 2.0f ||
 	   profile->l_h <= 0.000001f || profile->l_h > 0.02f ||
 	   profile->flux_wb <= 0.00001f || profile->flux_wb > 1.0f ||
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	   profile->phase_current_max_a < 1.0f || profile->phase_current_max_a > 12.0f) {
+#else
 	   profile->phase_current_max_a < 1.0f || profile->phase_current_max_a > 70.0f) {
+#endif
 		return false;
 	}
 
@@ -669,7 +686,11 @@ bool g30_config_set_profile(bool delta, const g30_foc_profile_t *profile) {
 bool g30_config_set_common(float battery_current_max_a, float wheel_diameter_m,
 		uint8_t motor_poles, float delta_enter_kmh, float delta_exit_kmh,
 		float switch_iq_a, uint16_t relay_settle_ms, bool auto_delta) {
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	if(auto_delta || battery_current_max_a < 1.0f || battery_current_max_a > 8.0f ||
+#else
 	if(battery_current_max_a < 1.0f || battery_current_max_a > 70.0f ||
+#endif
 	   wheel_diameter_m < 0.10f || wheel_diameter_m > 0.60f ||
 	   motor_poles < 2u || motor_poles > 60u ||
 	   delta_enter_kmh < 5.0f || delta_enter_kmh > 80.0f ||
