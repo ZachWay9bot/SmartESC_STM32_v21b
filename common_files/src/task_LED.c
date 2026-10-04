@@ -52,7 +52,9 @@ static volatile bool delta_active = false;
 static volatile bool delta_coast_required = false;
 static bool delta_target = false;
 static delta_state_t delta_state = DELTA_STATE_IDLE;
+#if DELTA_RELAY_ENABLE
 static TickType_t delta_deadline = 0;
+#endif
 static volatile bool delta_setup_override = false;
 
 /*
