@@ -91,6 +91,12 @@ void app_set_configuration(app_configuration *conf) {
 				}
 			}
 			task_app_init(&aux_uart);
+			/*
+			 * Do not fall through into APP_ADC_UART. The old fall-through can
+			 * kill the just-started ADC/display task during a live config write
+			 * and replace it with the CLI task on the same UART.
+			 */
+			break;
 		case APP_ADC_UART:
 			if( xTaskGetSchedulerState() == taskSCHEDULER_RUNNING){
 				if(old_app == APP_ADC){
