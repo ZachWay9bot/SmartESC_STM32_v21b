@@ -95,7 +95,14 @@
 #define HW_LIM_F_SW			    4000.0, 20000.0
 
 #define MOT_TMR_MHZ 64
-#define HEAP_SIZE_KB 14
+/*
+ * Upstream G30 sat essentially on the 20 KiB SRAM ceiling. The previous
+ * candidate linked with data+bss = 20,436 bytes, leaving only 44 bytes of
+ * static headroom. Several independent G30 forks reduced the RTOS heap to
+ * 13 KiB to make the target robustly link. Scope capture is disabled on G30,
+ * and automatic motor detection is disabled in this bring-up candidate.
+ */
+#define HEAP_SIZE_KB 13
 #define CPU_MHZ  (64*1000000)
 /*
  * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
