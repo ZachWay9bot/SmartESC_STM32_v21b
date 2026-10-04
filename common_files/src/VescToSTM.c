@@ -343,9 +343,28 @@ void VescToSTM_pwm_start(void){
 		utils_truncate_number(&fVd, -32767, 32767);
 		PIDIqHandle_M1.wIntegralTerm = fVd * TF_KIDIV;
 		PIDIdHandle_M1.wIntegralTerm = -PIDIqHandle_M1.wIntegralTerm/4;
+#if defined(G30P) && G30_SENSORED_BRINGUP
+		/*
+		 * True-coast stops the PWM/high-frequency FOC task, so hElAngle can be
+		 * stale when torque is requested again. MeasuredElAngle is maintained by
+		 * the Hall timer ISR. Re-seed both hElAngle and CompAngle atomically from
+		 * one Hall sample before re-enabling PWM.
+		 *
+		 * Do not wipe the speed state while the wheel is still moving; doing so
+		 * creates an artificial standstill every time throttle is re-applied.
+		 */
+		int16_t hall_angle = HALL_M1.MeasuredElAngle;
+		HALL_M1._Super.hElAngle = hall_angle;
+		HALL_M1.CompAngle = hall_angle;
+		if(HALL_M1._Super.hElSpeedDpp == 0){
+			HALL_M1.CompSpeed = 0;
+			HALL_M1._Super.hAvrMecSpeedUnit = 0;
+		}
+#else
 		HALL_M1._Super.hElAngle = HALL_M1.MeasuredElAngle;
 		HALL_M1.CompSpeed = 0;
 		HALL_M1._Super.hAvrMecSpeedUnit = 0;
+#endif
 		PWMC_SwitchOnPWM(&PWM_Handle_M1._Super);
 	}
 }
