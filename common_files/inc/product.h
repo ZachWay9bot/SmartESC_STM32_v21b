@@ -28,6 +28,11 @@
 #define APP2_USART_RX_DMA													 hdma_usart3_rx
 
 #define RSHUNT                        										 0.00200
+/*
+ * G30 schematic nominal current-sense gain is 1 + 24k/3k = 9.0.
+ * Upstream uses 9.4336, likely as empirical calibration. Keep that value
+ * until a controlled current calibration is done on the real controller.
+ */
 #define AMPLIFICATION_GAIN            										 9.4336
 #define NOMINAL_CURRENT         											 2000
 #define ID_DEMAG															 -2000
@@ -53,7 +58,12 @@
  * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
  */
 #define SESC_NO_REGEN                                                       1
-#define DELTA_RELAY_ENABLE                                                  1
+/*
+ * Bring-up policy: prove stock STAR + Hall FOC first.
+ * No automatic or setup-forced STAR/DELTA switching on this branch.
+ */
+#define G30_SENSORED_BRINGUP                                               1
+#define DELTA_RELAY_ENABLE                                                  0
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
 #define SESC_SHU_MAX_APP_BYTES                                              (52u * 1024u)
@@ -68,9 +78,15 @@
 #define DELTA_RELAY_SETTLE_MS                                               (100u)
 
 // Setting limits
-#define HW_LIM_CURRENT			-70.0, 70.0
-#define HW_LIM_CURRENT_IN		-70.0, 70.0
-#define HW_LIM_CURRENT_ABS		0.0, 100.0
+#if G30_SENSORED_BRINGUP
+#define HW_LIM_CURRENT            -12.0, 12.0
+#define HW_LIM_CURRENT_IN         -8.0, 8.0
+#define HW_LIM_CURRENT_ABS        0.0, 15.0
+#else
+#define HW_LIM_CURRENT            -70.0, 70.0
+#define HW_LIM_CURRENT_IN         -70.0, 70.0
+#define HW_LIM_CURRENT_ABS        0.0, 100.0
+#endif
 #define HW_LIM_VIN				6.0, 57.0
 #define HW_LIM_ERPM				-100e3, 100e3
 #define HW_LIM_DUTY_MIN			0.0, 0.1
