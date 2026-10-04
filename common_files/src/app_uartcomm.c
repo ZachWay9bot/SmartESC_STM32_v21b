@@ -378,6 +378,7 @@ static void sesc_cfg_reply(port_str *port, uint8_t dst, uint8_t arg,
 	my_uart_send_data(out, (uint8_t)(9u + payload_len), port);
 }
 
+#if !defined(G30_SENSORED_BRINGUP) || !G30_SENSORED_BRINGUP
 static uint8_t sesc_hall_diff(uint8_t a, uint8_t b) {
 	if(a == 255u || b == 255u) {
 		return a == b ? 0u : 255u;
@@ -565,6 +566,8 @@ fail:
 	sesc_detect_task_handle = NULL;
 	vTaskDelete(NULL);
 }
+
+#endif /* automatic motor detection omitted from sensored bring-up */
 
 static bool sesc_cfg_start_detect(bool delta, uint16_t power_loss_w) {
 #if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
