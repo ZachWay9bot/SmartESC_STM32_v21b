@@ -11,6 +11,21 @@
 >
 > **Blind installation on a daily-use or non-recoverable G30 controller is explicitly discouraged.**
 
+> ## Current conservative candidate: G30 sensored hwtest v0.1
+>
+> Branch: `candidate/g30-sensored-hwtest-v0.1`
+>
+> This candidate is deliberately limited to **stock STAR + Hall-sensored FOC**. Automatic STAR/DELTA, sensorless/HFI and automatic motor detection are disabled. Hardware limits are capped at **12 A phase, 8 A battery and 15 A absolute current**.
+>
+> Additional bring-up fixes included after auditing active SmartESC v2 forks:
+> - 13 KiB G30 RTOS heap for usable SRAM link margin
+> - Hall electrical-angle + compensation-angle re-sync after true coast
+> - corrected q-axis battery-current scaling (3/2 Clarke/Park power factor)
+> - G30 current-PI SI-to-ST-count scaling, checked against the original Workbench gain order
+> - APP_ADC fall-through fix so a live config write cannot replace the dashboard/ADC task
+>
+> **This is still an unvalidated hardware-test candidate, not a release. First validation is wheel-off-ground with ST-Link/SWD recovery available.**
+
 **DeltaESC is a G30D-focused motor-controller firmware based heavily on SmartESC by Koxx3.**
 
 Upstream project: [Koxx3/SmartESC_STM32_v2](https://github.com/Koxx3/SmartESC_STM32_v2)
