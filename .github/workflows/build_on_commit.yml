@@ -52,8 +52,8 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         path: |
-          ${{ github.workspace }}/DeltaESC_G30D_v0.3.bin
-          ${{ github.workspace }}/DeltaESC_G30D_v0.3_SHU.zip
+          ${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1.bin
+          ${{ github.workspace }}/DeltaESC_G30D_v0.3_RC1_SHU.zip
         name: DeltaESC-G30D-v0.3-RC1-${{ github.run_number }}
         retention-days: 5
 
