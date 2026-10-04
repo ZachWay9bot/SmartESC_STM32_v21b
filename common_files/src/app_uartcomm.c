@@ -303,7 +303,9 @@ static volatile uint8_t sesc_detect_state = SESC_DETECT_IDLE;
 static volatile int8_t sesc_detect_error = 0;
 static volatile uint8_t sesc_detect_target_delta = 0;
 static volatile uint8_t sesc_detect_progress = 0;
+#if !defined(G30_SENSORED_BRINGUP) || !G30_SENSORED_BRINGUP
 static uint16_t sesc_detect_power_loss_w = 100u;
+#endif
 static TaskHandle_t sesc_detect_task_handle = NULL;
 
 static void sesc_cfg_rx_reset(void) {
