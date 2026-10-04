@@ -361,6 +361,8 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 	mcconf->override_limits = false;
 	conf_general_mcconf_hw_limits(mcconf);
 	mcconf->foc_fw_current_max = 0.0f;
+	/* Stock G30 motor: 15 electrical pole pairs (g30p.wb_def). */
+	mcconf->si_motor_poles = 15u;
 #endif
 
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
@@ -581,6 +583,7 @@ static void g30_config_copy_profile_to_mc(bool delta) {
 	conf_general_calc_apply_foc_cc_kp_ki_gain(&mc_conf, 1000.0f);
 #if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
 	mc_conf.override_limits = false;
+	mc_conf.si_motor_poles = 15u;
 #endif
 	conf_general_mcconf_hw_limits(&mc_conf);
 }
@@ -690,7 +693,8 @@ bool g30_config_set_common(float battery_current_max_a, float wheel_diameter_m,
 		uint8_t motor_poles, float delta_enter_kmh, float delta_exit_kmh,
 		float switch_iq_a, uint16_t relay_settle_ms, bool auto_delta) {
 #if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
-	if(auto_delta || battery_current_max_a < 1.0f || battery_current_max_a > 8.0f ||
+	if(auto_delta || motor_poles != 15u ||
+	   battery_current_max_a < 1.0f || battery_current_max_a > 8.0f ||
 #else
 	if(battery_current_max_a < 1.0f || battery_current_max_a > 70.0f ||
 #endif
