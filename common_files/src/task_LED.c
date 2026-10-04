@@ -56,13 +56,11 @@ static TickType_t delta_deadline = 0;
 static volatile bool delta_setup_override = false;
 
 /*
- * G30 rear-light output is open-drain.
- * RESET (low) is the fail-safe STAR state.
- * SET releases the line; the external interface must provide the pull-up and
- * use that released/high state to energise the DELTA relays.
+ * G30 Gen1: the former tail-light control is PA15. Keep it dedicated to the
+ * external STAR/DELTA interface: low = fail-safe STAR, high = DELTA request.
  */
 static void delta_write_output(bool active) {
-	HAL_GPIO_WritePin(BRAKE_LIGHT_GPIO_Port, BRAKE_LIGHT_Pin,
+	HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin,
 			active ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
@@ -197,12 +195,18 @@ bool task_delta_setup_active(void) {
 void prv_LED_blink(uint32_t speed){
 	static uint16_t cnt=0;
 	static uint8_t brake_cnt=0;
+#ifndef G30P
 	if(cnt>speed){
 		cnt=0;
 		HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 	}else{
 		cnt++;
 	}
+#else
+	/* PA15 is the STAR/DELTA output on G30 Gen1; never blink it. */
+	(void)speed;
+	(void)cnt;
+#endif
 
 
 #ifdef G30P
