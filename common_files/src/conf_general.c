@@ -579,6 +579,9 @@ static void g30_config_copy_profile_to_mc(bool delta) {
 
 	memcpy(mc_conf.foc_hall_table, g30_cfg.hall_table, sizeof(g30_cfg.hall_table));
 	conf_general_calc_apply_foc_cc_kp_ki_gain(&mc_conf, 1000.0f);
+#if defined(G30_SENSORED_BRINGUP) && G30_SENSORED_BRINGUP
+	mc_conf.override_limits = false;
+#endif
 	conf_general_mcconf_hw_limits(&mc_conf);
 }
 
