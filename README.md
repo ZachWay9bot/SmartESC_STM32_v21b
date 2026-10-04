@@ -25,6 +25,7 @@
 > - APP_ADC fall-through fix so a live config write cannot replace the dashboard/ADC task
 > - drive-mode current-scale preservation across live config writes
 > - hard STAR-only runtime interlocks, including DELTA profile rejection
+> - stock G30 speed conversion pinned to 15 pole pairs (matching `g30p.wb_def`)
 >
 > **This is still an unvalidated hardware-test candidate, not a release. First validation is wheel-off-ground with ST-Link/SWD recovery available.**
 
