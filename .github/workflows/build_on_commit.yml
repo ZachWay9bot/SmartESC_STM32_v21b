@@ -43,18 +43,18 @@ jobs:
     - name: 'Package G30P for SHU'
       run: |
         cp "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
-          "${{ github.workspace }}/DeltaESC_G30D_v0.2.bin"
+          "${{ github.workspace }}/DeltaESC_G30D_Sensored_HWTest_v0.1.bin"
         python3 tools/make_shu_zip.py \
           "${{ github.workspace }}/g30p/STM32CubeIDE/Debug/g30p.bin" \
-          "${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip"
+          "${{ github.workspace }}/DeltaESC_G30D_Sensored_HWTest_v0.1_SHU.zip"
 
     - name: 'Upload Artifact G30P + SHU package'
       uses: actions/upload-artifact@v4
       with:
         path: |
-          ${{ github.workspace }}/DeltaESC_G30D_v0.2.bin
-          ${{ github.workspace }}/DeltaESC_G30D_v0.2_SHU.zip
-        name: DeltaESC-G30D-v0.2-${{ github.run_number }}
+          ${{ github.workspace }}/DeltaESC_G30D_Sensored_HWTest_v0.1.bin
+          ${{ github.workspace }}/DeltaESC_G30D_Sensored_HWTest_v0.1_SHU.zip
+        name: DeltaESC-G30D-Sensored-HWTest-v0.1-${{ github.run_number }}
         retention-days: 5
 
     - name: 'Build M365 regression target'
