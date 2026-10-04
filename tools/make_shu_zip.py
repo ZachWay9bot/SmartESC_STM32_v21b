@@ -149,6 +149,11 @@ def main() -> int:
         default="DeltaESC G30D v0.2",
         help="displayName stored in info.json",
     )
+    ap.add_argument(
+        "--sensored-hwtest",
+        action="store_true",
+        help="write conservative STAR-only sensored hardware-test notes",
+    )
     args = ap.parse_args()
 
     plain = args.firmware.read_bytes()
@@ -171,20 +176,42 @@ def main() -> int:
         },
     }
 
-    notes = (
-        "DeltaESC G30D v0.2 + dual STAR/DELTA profile candidate\n"
-        "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
-        "Throttle release: coast\n"
-        "Brake: motor cut, no regenerative braking\n"
-        "STAR/DELTA: rear-light output, DELTA >= 32 km/h, STAR <= 26 km/h\n"
-        "Relay switching: wait for |Iq| <= 2 A, then 100 ms settle\n"
-        "Stock BMS: USART3 heartbeat/activator every 200 ms + read-only telemetry\n"
-        "Config: companion-app protocol 0x7D; STAR/DELTA R/L/flux/current profiles\n"
-        "Motor setup: R/L + flux + Hall detect, with DELTA Hall verification\n"
-        f"Image size: {len(plain)} bytes\n"
-        f"Initial SP: 0x{sp:08X}\n"
-        f"Reset handler: 0x{reset:08X}\n"
-    )
+    if args.sensored_hwtest:
+        notes = (
+            "DeltaESC G30D Sensored HWTest v0.1 - UNVALIDATED HARDWARE TEST\n"
+            "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
+            "Motor control: Hall-sensored FOC only\n"
+            "Motor topology: STAR only; DELTA switching and DELTA profiles disabled\n"
+            "Automatic motor detection: disabled\n"
+            "Sensorless/HFI: disabled as rotor-position source\n"
+            "Field weakening: forced off\n"
+            "Throttle release: true coast\n"
+            "Brake: motor cut, no regenerative braking\n"
+            "Hard phase-current limit: +/-12 A\n"
+            "Hard battery-current limit: +/-8 A\n"
+            "Absolute phase-current fault limit: 15 A\n"
+            "Stock BMS: USART3 heartbeat/activator + read-only telemetry\n"
+            "Recovery: keep ST-Link/SWD and a verified 128 KiB backup available\n"
+            "FIRST TEST: wheel off ground; do not use as a daily-use release\n"
+            f"Image size: {len(plain)} bytes\n"
+            f"Initial SP: 0x{sp:08X}\n"
+            f"Reset handler: 0x{reset:08X}\n"
+        )
+    else:
+        notes = (
+            "DeltaESC G30D v0.2 + dual STAR/DELTA profile candidate\n"
+            "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
+            "Throttle release: coast\n"
+            "Brake: motor cut, no regenerative braking\n"
+            "STAR/DELTA: rear-light output, DELTA >= 32 km/h, STAR <= 26 km/h\n"
+            "Relay switching: wait for |Iq| <= 2 A, then 100 ms settle\n"
+            "Stock BMS: USART3 heartbeat/activator every 200 ms + read-only telemetry\n"
+            "Config: companion-app protocol 0x7D; STAR/DELTA R/L/flux/current profiles\n"
+            "Motor setup: R/L + flux + Hall detect, with DELTA Hall verification\n"
+            f"Image size: {len(plain)} bytes\n"
+            f"Initial SP: 0x{sp:08X}\n"
+            f"Reset handler: 0x{reset:08X}\n"
+        )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
