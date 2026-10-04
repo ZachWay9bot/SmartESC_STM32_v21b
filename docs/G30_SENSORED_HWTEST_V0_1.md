@@ -48,6 +48,11 @@ Relevant mappings:
 
 The controller uses three 2 mOhm phase shunts and real three-shunt current sensing.
 
+The original SmartESC `g30p.wb_def` specifies **15 pole pairs**. The shared
+`product.h` / setup default had drifted to 14, which skews mechanical speed and
+odometer conversion. v0.1 pins the live G30 configuration to 15 pole pairs and
+rejects a different pole-pair setting during bring-up.
+
 The schematic's nominal current-amplifier resistor ratio is 1 + 24k/3k = 9.0.
 Upstream SmartESC uses `AMPLIFICATION_GAIN = 9.4336`. v0.1 deliberately keeps
 9.4336 because it may be an empirical calibration. The value must be verified
