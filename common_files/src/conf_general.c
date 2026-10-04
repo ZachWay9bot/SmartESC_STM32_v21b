@@ -395,8 +395,30 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 	PIDSpeedHandle_M1.hDefKpGain 		  = PIDSpeedHandle_M1.hKpGain;
 	PIDSpeedHandle_M1.hDefKiGain 		  = PIDSpeedHandle_M1.hKiGain;
 
+#if defined(G30P) && G30_SENSORED_BRINGUP
+	/*
+	 * SmartESC stores the detected current gains in SI units (V/A and
+	 * V/(A*s)), while the ST current PI works in ADC current counts and s16
+	 * voltage counts. Convert domains before loading the PI.
+	 *
+	 * For the stock G30 constants this gives a scale of about 4.86. As a
+	 * sanity check, the default kp=0.09 then loads around 448 counts, close
+	 * to the original MC Workbench PID_TORQUE_KP_DEFAULT=500. Loading the SI
+	 * number directly gives only ~92 counts.
+	 */
+	const float foc_cc_gain_scale =
+		65536.0f / ((float)NOMINAL_BUS_VOLTAGE_V * (float)CURRENT_FACTOR_A);
+	float cc_kp = mcconf->foc_current_kp * foc_cc_gain_scale * (float)TF_KPDIV;
+	float cc_ki = mcconf->foc_current_ki * foc_cc_gain_scale *
+		(float)TF_KIDIV / (float)mcconf->foc_f_sw;
+	utils_truncate_number(&cc_kp, 0.0f, (float)INT16_MAX);
+	utils_truncate_number(&cc_ki, 0.0f, (float)INT16_MAX);
+	PIDIqHandle_M1.hKpGain                = (int16_t)cc_kp;
+	PIDIqHandle_M1.hKiGain                = (int16_t)cc_ki;
+#else
 	PIDIqHandle_M1.hKpGain          	  = mcconf->foc_current_kp * (float)TF_KPDIV;
 	PIDIqHandle_M1.hKiGain                = mcconf->foc_current_ki * (float)TF_KIDIV / (float)mcconf->foc_f_sw;
+#endif
 	PIDIqHandle_M1.hDefKpGain 			  = PIDIqHandle_M1.hKpGain;
 	PIDIqHandle_M1.hDefKiGain 			  = PIDIqHandle_M1.hKiGain;
 	PIDIqHandle_M1.hUpperOutputLimit	  = INT16_MAX * mcconf->l_max_duty;
