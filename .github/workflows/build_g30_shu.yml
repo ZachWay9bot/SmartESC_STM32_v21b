@@ -76,7 +76,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           path: |
-            DeltaESC_G30D_v0.3.bin
-            DeltaESC_G30D_v0.3_SHU.zip
+            DeltaESC_G30D_v0.3_RC1.bin
+            DeltaESC_G30D_v0.3_RC1_SHU.zip
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map
