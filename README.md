@@ -23,6 +23,8 @@
 > - corrected q-axis battery-current scaling (3/2 Clarke/Park power factor)
 > - G30 current-PI SI-to-ST-count scaling, checked against the original Workbench gain order
 > - APP_ADC fall-through fix so a live config write cannot replace the dashboard/ADC task
+> - drive-mode current-scale preservation across live config writes
+> - hard STAR-only runtime interlocks, including DELTA profile rejection
 >
 > **This is still an unvalidated hardware-test candidate, not a release. First validation is wheel-off-ground with ST-Link/SWD recovery available.**
 
