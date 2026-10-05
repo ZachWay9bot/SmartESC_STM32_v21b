@@ -89,13 +89,14 @@
 #define HEAP_SIZE_KB 14
 #define CPU_MHZ  (64*1000000)
 /*
- * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
- * update-control data used by the IAP/SHU rollback path.
+ * Do not use pages 126/127 here. The upper stock G30 flash contains
+ * calibration/update-control data needed by the original firmware/IAP path.
  *
- * The stock application region ends at 0x0800DFFF (page 55). Pages 56/57
- * (0x0800E000..0x0800E7FF) are used for SmartESC app/motor configuration.
- * The documented stock update staging starts at 0x0800E800, so the normal
- * IAP staging/calibration/update-control ranges remain available.
+ * The reversible application ends at 0x0800DFFF (page 55). DeltaESC uses the
+ * first two pages immediately above it (56/57) for app/motor configuration.
+ * Those pages are within the stock OTA staging/scratch region, so settings are
+ * expected to survive normal reboots but may be erased by a firmware update.
+ * The stock calibration/update-control region at the top of flash is untouched.
  */
 #define APP_PAGE				56
 #define CONF_PAGE				57
