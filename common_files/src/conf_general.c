@@ -50,6 +50,11 @@ app_configuration appconf;
 #define APP_CONFIG_FLASH_ADDR (0x08000000u + ((uint32_t)APP_PAGE * (uint32_t)PAGE_SIZE))
 #define MC_CONFIG_FLASH_ADDR  (0x08000000u + ((uint32_t)CONF_PAGE * (uint32_t)PAGE_SIZE))
 
+_Static_assert(sizeof(app_configuration) <= PAGE_SIZE,
+		"app_configuration does not fit in its flash page");
+_Static_assert(sizeof(mc_configuration) <= PAGE_SIZE,
+		"mc_configuration does not fit in its flash page");
+
 #ifdef G30P
 static g30_sesc_config_t g30_cfg;
 static bool g30_config_program_tail(void);
