@@ -220,8 +220,9 @@ bool app_shu_invalidate_app_vector(void) {
 }
 
 static void shu_handoff_to_stock_iap(void) {
-	/* Never enter a flasher while the wheel is moving. */
-	if(fabsf(VescToSTM_get_speed()) > 0.5f) {
+	/* Never enter a flasher while moving or with throttle held. */
+	if(fabsf(VescToSTM_get_speed()) > 0.5f ||
+	   app_adc_get_decoded_level() > 0.02f) {
 		return;
 	}
 
@@ -232,10 +233,15 @@ static void shu_handoff_to_stock_iap(void) {
 		return;
 	}
 
-	/* Fail-safe STAR and high-Z inverter before committing to IAP recovery. */
-	HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
+	/*
+	 * Make the inverter high-Z before touching the winding topology. If the
+	 * scooter happened to be in DELTA, changing the relay while PWM is still
+	 * active is exactly the sequence we must avoid.
+	 */
 	VescToSTM_pwm_stop();
-	vTaskDelay(MS_TO_TICKS(10));
+	vTaskDelay(MS_TO_TICKS(20u));
+	HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
+	vTaskDelay(MS_TO_TICKS(g30_config_get()->relay_settle_ms));
 
 	if(!app_shu_invalidate_app_vector()) {
 		/* Keep the current firmware running if flash programming was rejected. */
@@ -811,6 +817,189 @@ static uint32_t uart_get_write_pos(port_str * port){
 
 static uint8_t adc1;
 static uint8_t adc2;
+
+#ifdef G30P
+/*
+ * Native G30 dashboard protocol.
+ *
+ * The upstream SmartESC parser below is the older 55 AA / single-address
+ * M365 layout. A stock G30 uses 5A A5 and separate source/destination bytes:
+ *
+ *   5A A5 LEN SRC DST CMD ARG payload[LEN] CK_LO CK_HI
+ *
+ * Keep this parser G30-local so the proven M365 path remains untouched.
+ */
+#define G30_DASH_HEADER0                0x5Au
+#define G30_DASH_HEADER1                0xA5u
+#define G30_DASH_ADDR_ESC               0x20u
+#define G30_DASH_ADDR_BLE               0x21u
+#define G30_DASH_CMD_STATUS             0x64u
+#define G30_DASH_CMD_CONTROL            0x65u
+#define G30_DASH_CONTROL_MIN_PAYLOAD    3u
+#define G30_CONTROL_RX_TIMEOUT_MS       1000u
+
+typedef struct {
+	uint8_t state;
+	uint8_t index;
+	uint8_t expected;
+	uint8_t body[80];
+} g30_dash_rx_t;
+
+static g30_dash_rx_t g30_dash_rx;
+static volatile TickType_t g30_last_control_rx = 0;
+static volatile bool g30_control_seen = false;
+static bool g30_control_armed = false;
+
+static void g30_dash_rx_reset(void) {
+	memset(&g30_dash_rx, 0, sizeof(g30_dash_rx));
+}
+
+static uint16_t g30_dash_checksum(const uint8_t *data, uint8_t len) {
+	uint16_t sum = 0;
+	for(uint8_t i = 0; i < len; i++) {
+		sum = (uint16_t)(sum + data[i]);
+	}
+	return (uint16_t)(~sum);
+}
+
+static bool g30_dash_feed_byte(uint8_t b) {
+	switch(g30_dash_rx.state) {
+	case 0:
+		if(b == G30_DASH_HEADER0) {
+			g30_dash_rx.state = 1;
+		}
+		break;
+	case 1:
+		if(b == G30_DASH_HEADER1) {
+			g30_dash_rx.state = 2;
+			g30_dash_rx.index = 0;
+			g30_dash_rx.expected = 0;
+		} else if(b != G30_DASH_HEADER0) {
+			g30_dash_rx_reset();
+		}
+		break;
+	case 2:
+		if(g30_dash_rx.index >= sizeof(g30_dash_rx.body)) {
+			g30_dash_rx_reset();
+			break;
+		}
+		g30_dash_rx.body[g30_dash_rx.index++] = b;
+		if(g30_dash_rx.index == 1u) {
+			const uint16_t expected = (uint16_t)b + 7u;
+			if(expected < 7u || expected > sizeof(g30_dash_rx.body)) {
+				g30_dash_rx_reset();
+				break;
+			}
+			g30_dash_rx.expected = (uint8_t)expected;
+		}
+		if(g30_dash_rx.expected && g30_dash_rx.index == g30_dash_rx.expected) {
+			const uint8_t data_len = (uint8_t)(g30_dash_rx.expected - 2u);
+			const uint16_t calc = g30_dash_checksum(g30_dash_rx.body, data_len);
+			const uint16_t recv =
+					(uint16_t)g30_dash_rx.body[data_len] |
+					((uint16_t)g30_dash_rx.body[data_len + 1u] << 8);
+			if(calc == recv) {
+				return true;
+			}
+			g30_dash_rx_reset();
+		}
+		break;
+	default:
+		g30_dash_rx_reset();
+		break;
+	}
+	return false;
+}
+
+static void g30_dash_send_status(port_str *port) {
+	uint8_t out[15] = {
+		G30_DASH_HEADER0, G30_DASH_HEADER1, 0x06u,
+		G30_DASH_ADDR_ESC, G30_DASH_ADDR_BLE,
+		G30_DASH_CMD_STATUS, 0x00u,
+		0, 0, 0, 0, 0, 0, 0, 0
+	};
+
+	float speed_kmh = fabsf(VescToSTM_get_speed() * 3.6f);
+	if(speed_kmh > 255.0f) speed_kmh = 255.0f;
+
+	m365_to_display.speed = (uint8_t)speed_kmh;
+	m365_to_display.battery = g30_bms_is_online() ? g30_bms_get_soc() :
+			(uint8_t)utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
+	if(m365_to_display.battery > 100u) {
+		m365_to_display.battery = 100u;
+	}
+	m365_to_display.faultcode = pMCI[M1]->pSTM->hFaultOccurred;
+
+	out[7] = m365_to_display.mode;
+	out[8] = m365_to_display.battery;
+	out[9] = m365_to_display.light ? 1u : 0u;
+	out[10] = m365_to_display.beep;
+	out[11] = m365_to_display.speed;
+	out[12] = m365_to_display.faultcode;
+
+	const uint16_t ck = g30_dash_checksum(&out[2], 11u);
+	out[13] = (uint8_t)(ck & 0xFFu);
+	out[14] = (uint8_t)(ck >> 8);
+	my_uart_send_data(out, sizeof(out), port);
+}
+
+static void g30_dash_accept_control(const uint8_t *payload, uint8_t len) {
+	if(payload == NULL || len < 2u) {
+		return;
+	}
+
+	/*
+	 * Two G30 head-I/O layouts are in circulation:
+	 *   LEN >= 3: leading control byte, then throttle, brake
+	 *   LEN == 2: compact throttle, brake
+	 */
+	if(len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
+		adc1 = payload[1];
+		adc2 = payload[2];
+	} else {
+		adc1 = payload[0];
+		adc2 = payload[1];
+	}
+
+	g30_last_control_rx = xTaskGetTickCount();
+	g30_control_seen = true;
+	VescToSTM_timeout_reset();
+	app_check_timer();
+}
+
+static void g30_dash_consume_ready(port_str *port) {
+	const uint8_t len = g30_dash_rx.body[0];
+	const uint8_t src = g30_dash_rx.body[1];
+	const uint8_t dst = g30_dash_rx.body[2];
+	const uint8_t cmd = g30_dash_rx.body[3];
+	const uint8_t *payload = &g30_dash_rx.body[5];
+
+	if(src == G30_DASH_ADDR_BLE && dst == G30_DASH_ADDR_ESC) {
+		if(cmd == G30_DASH_CMD_CONTROL) {
+			/*
+			 * 0x65 is used by the established G30 VESC dashboard bridges for
+			 * throttle/brake transport.
+			 */
+			g30_dash_accept_control(payload, len);
+		} else if(cmd == G30_DASH_CMD_STATUS) {
+			/*
+			 * 0x64 is the Ninebot head-I/O command. Older/stock-style traces
+			 * carry the same leading-control/throttle/brake bytes in the request,
+			 * while the ESC replies with the 0x64 display state. Accept both so
+			 * RC2 works with either dashboard dialect without weakening CRC or
+			 * source/destination validation.
+			 */
+			if(len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
+				g30_dash_accept_control(payload, len);
+			}
+			g30_dash_send_status(port);
+		}
+	}
+
+	g30_dash_rx_reset();
+}
+#endif
+
 void app_adc_set_adc(uint8_t AD1, uint8_t AD2){
 	if(xTimer!=NULL && xTimerIsTimerActive(xTimer)==pdFALSE){
 		xTimerStart(xTimer, 100);
@@ -894,6 +1083,41 @@ void vTimerCallback( TimerHandle_t xTimer ){
 	utils_truncate_number(&brake, 0.0, 1.0);
 	decoded_level = pwr;
 	decoded_level2 = brake;
+
+#ifdef G30P
+	/*
+	 * Drive enable interlock:
+	 * - no valid stock-G30 0x65 frame => no torque
+	 * - stale dashboard stream => disarm
+	 * - any motor-control fault => disarm
+	 * - after boot/link loss/fault, throttle must return to neutral before
+	 *   propulsion can be armed again
+	 */
+	const TickType_t now_ticks = xTaskGetTickCount();
+	const bool g30_control_fresh =
+			g30_control_seen &&
+			(now_ticks - g30_last_control_rx) <= MS_TO_TICKS(G30_CONTROL_RX_TIMEOUT_MS);
+
+	if(!g30_control_fresh || pMCI[M1]->pSTM->hFaultOccurred) {
+		g30_control_armed = false;
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+		return;
+	}
+
+	if(!g30_control_armed) {
+		if(decoded_level <= 0.02f) {
+			g30_control_armed = true;
+		}
+		VescToSTM_set_current_rel(0.0f);
+		if(fabsf(VescToSTM_get_iq()) <= TRUE_COAST_IQ_A) {
+			VescToSTM_pwm_stop();
+		}
+		return;
+	}
+#endif
 
 	switch (config.ctrl_type) {
 		case ADC_CTRL_TYPE_CURRENT_REV_CENTER:
@@ -1056,6 +1280,9 @@ float app_adc_get_decoded_level2(void) {
 }
 
 void app_adc_stop_output(void) {
+#ifdef G30P
+	g30_control_armed = false;
+#endif
 	if(xTimer!=NULL){
 		xTimerStop(xTimer, 2000);
 	}
@@ -1125,6 +1352,11 @@ void task_app(void * argument)
 				shu_handoff_to_stock_iap();
 			}
 #endif
+#ifdef G30P
+			if(g30_dash_feed_byte(usart_rx_dma_buffer[rd_ptr])) {
+				g30_dash_consume_ready(port);
+			}
+#else
 			if(ninebot_parse(usart_rx_dma_buffer[rd_ptr] ,&frame)	==0){
 				//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
 				switch(frame.cmd){
@@ -1137,10 +1369,10 @@ void task_app(void * argument)
 						adc2 = frame.payload[2];
 						VescToSTM_timeout_reset();
 						app_check_timer();
-						//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
 					break;
 				}
 			}
+#endif
 			rd_ptr++;
 			rd_ptr &= ((uint32_t)port->rx_buffer_size - 1);
 		}

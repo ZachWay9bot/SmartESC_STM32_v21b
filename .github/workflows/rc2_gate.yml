@@ -1,0 +1,113 @@
+name: DeltaESC G30D RC2 release gate
+
+on:
+  push:
+    branches: [ release-candidate/deltaesc-g30d-rc2 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  rc2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source and packaging preflight
+        run: python3 tools/test_shu_preflight.py
+
+      - name: Build G30P
+        uses: docker://wsbu/stm32cubeide:latest
+        with:
+          entrypoint: /opt/stm32cubeide/stm32cubeide
+          args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
+
+      - name: Validate and package G30D RC2
+        run: |
+          set -euxo pipefail
+          BIN="g30p/STM32CubeIDE/Debug/g30p.bin"
+          test -s "$BIN"
+          cp "$BIN" DeltaESC_G30D_v0.4_RC2.bin
+          python3 tools/make_shu_zip.py "$BIN" DeltaESC_G30D_v0.4_RC2_SHU.zip
+          python3 - <<'PY'
+          import struct
+          from pathlib import Path
+          p = Path("g30p/STM32CubeIDE/Debug/g30p.bin")
+          b = p.read_bytes()
+          sp, reset = struct.unpack_from("<II", b, 0)
+          reset_addr = reset & ~1
+          assert len(b) <= 52 * 1024, f"image too large: {len(b)}"
+          assert 0x20000000 <= sp <= 0x20005000, hex(sp)
+          assert reset & 1, f"reset handler not Thumb: 0x{reset:08X}"
+          assert 0x08001000 <= reset_addr < 0x0800E000, hex(reset_addr)
+          print(f"G30 RC2 validation OK: {len(b)} bytes, SP=0x{sp:08X}, Reset=0x{reset:08X}")
+          PY
+
+      - name: Build M365 regression target
+        uses: docker://wsbu/stm32cubeide:latest
+        with:
+          entrypoint: /opt/stm32cubeide/stm32cubeide
+          args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
+
+      - name: Prepare Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Test DeltaESC Config protocol
+        run: gradle -p android/SmartESCConfig :app:testDebugUnitTest --no-daemon
+
+      - name: Build DeltaESC Config RC2 APK
+        run: |
+          gradle -p android/SmartESCConfig :app:assembleDebug --no-daemon
+          cp android/SmartESCConfig/app/build/outputs/apk/debug/app-debug.apk DeltaESC_Config_v0.4.0_RC2.apk
+          cp m365/STM32CubeIDE/Debug/m365.bin m365_regression.bin
+
+      - name: Create RC2 manifest
+        run: |
+          set -euo pipefail
+          {
+            echo "DeltaESC G30D v0.4 RC2"
+            echo "commit=$GITHUB_SHA"
+            echo "run_id=$GITHUB_RUN_ID"
+            echo
+            sha256sum DeltaESC_G30D_v0.4_RC2.bin
+            sha256sum DeltaESC_G30D_v0.4_RC2_SHU.zip
+            sha256sum DeltaESC_Config_v0.4.0_RC2.apk
+            sha256sum m365_regression.bin
+          } | tee RC2_MANIFEST.txt
+
+      - name: Upload unified RC2 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeltaESC-G30D-v0.4-RC2-GATE-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            DeltaESC_G30D_v0.4_RC2.bin
+            DeltaESC_G30D_v0.4_RC2_SHU.zip
+            DeltaESC_Config_v0.4.0_RC2.apk
+            RC2_MANIFEST.txt
+            m365_regression.bin
+            g30p/STM32CubeIDE/Debug/g30p.elf
+            g30p/STM32CubeIDE/Debug/g30p.map
+
+      - name: Report RC2 gate status on PR
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment 8 --repo "$GITHUB_REPOSITORY" --body "RC2_GATE_STATUS status=${{ job.status }} commit=$GITHUB_SHA run_id=$GITHUB_RUN_ID artifact=DeltaESC-G30D-v0.4-RC2-GATE-${{ github.run_number }}"

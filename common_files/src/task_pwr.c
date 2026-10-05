@@ -78,12 +78,13 @@ eButtonEvent getButtonEvent()
 {
     static const uint32_t DOUBLE_GAP_MILLIS_MAX 	= 250;
     static const uint32_t SINGLE_PRESS_MILLIS_MAX 	= 300;
-    static const uint32_t LONG_PRESS_MILLIS_MAX 	= 5000;
+    static const uint32_t LONG_PRESS_MILLIS_MAX 	= 10000;
 
     static uint32_t button_down_ts = 0 ;
     static uint32_t button_up_ts = 0 ;
     static bool double_pending = false ;
-    static bool button_down = false ; ;
+    static bool button_down = false ;
+    static bool very_long_sent = false ;
 
     eButtonEvent button_event = NO_PRESS ;
     uint32_t now = HAL_GetTick() ;
@@ -92,7 +93,9 @@ eButtonEvent getButtonEvent()
         button_down = !button_down ;
         if( button_down ) {
             button_down_ts = now ;
+            very_long_sent = false ;
         } else {
+            very_long_sent = false ;
             button_up_ts = now ;
             if( double_pending ) {
                 button_event = DOUBLE_PRESS ;
@@ -111,8 +114,9 @@ eButtonEvent getButtonEvent()
 	} else if (!button_down && double_pending && diff >= SINGLE_PRESS_MILLIS_MAX && diff <= LONG_PRESS_MILLIS_MAX) {
 		double_pending = false ;
 		button_event = LONG_PRESS ;
-	} else if (button_down && now - button_down_ts > LONG_PRESS_MILLIS_MAX) {
+	} else if (button_down && !very_long_sent && now - button_down_ts > LONG_PRESS_MILLIS_MAX) {
 		double_pending = false ;
+		very_long_sent = true ;
 		button_event = VERY_LONG_PRESS ;
 	}
 
@@ -169,13 +173,22 @@ void task_PWR(void *argument) {
 				   * an invalid app and remains available for a recovery flash.
 				   */
 				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
-					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
-					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
+					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A &&
+					 app_adc_get_decoded_level() <= 0.02f &&
+					 app_adc_get_decoded_level2() >= 0.80f) {
+					  /*
+					   * Deliberate recovery gesture: >10 s power-button hold
+					   * while stationary, throttle neutral and brake held.
+					   */
 					  VescToSTM_pwm_stop();
+					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
 					  if(app_shu_invalidate_app_vector()) {
 						  __disable_irq();
 						  NVIC_SystemReset();
 					  }
+				  } else {
+					  /* Ordinary very-long hold is just a safe power-off. */
+					  power_control(DEV_PWR_OFF);
 				  }
 #endif
 			  } break ;

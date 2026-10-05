@@ -42,6 +42,19 @@
 mc_configuration mc_conf;
 app_configuration appconf;
 
+/*
+ * Configuration flash addresses must follow the target-specific APP_PAGE and
+ * CONF_PAGE definitions. The upstream code used hard-coded pages 126/127,
+ * which is correct for M365 but wrong for the reversible G30 layout.
+ */
+#define APP_CONFIG_FLASH_ADDR (0x08000000u + ((uint32_t)APP_PAGE * (uint32_t)PAGE_SIZE))
+#define MC_CONFIG_FLASH_ADDR  (0x08000000u + ((uint32_t)CONF_PAGE * (uint32_t)PAGE_SIZE))
+
+_Static_assert(sizeof(app_configuration) <= PAGE_SIZE,
+		"app_configuration does not fit in its flash page");
+_Static_assert(sizeof(mc_configuration) <= PAGE_SIZE,
+		"mc_configuration does not fit in its flash page");
+
 #ifdef G30P
 static g30_sesc_config_t g30_cfg;
 static bool g30_config_program_tail(void);
@@ -62,6 +75,14 @@ void conf_general_init(void) {
 	DWT_CTRL |= CYCCNTENA;
 
 	MCI_StartMotor(pMCI[M1]);
+#ifdef G30P
+	/*
+	 * G30 starts high-Z. The dashboard-control interlock in app_uartcomm.c
+	 * explicitly re-enables PWM only after a fresh, checksum-valid control
+	 * stream has been seen with throttle returned to neutral.
+	 */
+	VescToSTM_pwm_stop();
+#endif
 }
 
 /**
@@ -88,13 +109,13 @@ unsigned conf_calc_crc(mc_configuration* conf_in) {
 
 uint8_t Flash_ReadByte_MC(uint32_t x){
 	uint8_t data[4];
-	*(uint32_t*)data = (*(__IO uint32_t*)(ADDR_FLASH_PAGE_127+((x/4)*4)));
+	*(uint32_t*)data = (*(__IO uint32_t*)(MC_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)));
 	return data[x%4];
 }
 
 uint8_t Flash_ReadByte_APP(uint32_t x){
 	uint8_t data[4];
-	*(uint32_t*)data = (*(__IO uint32_t*)(ADDR_FLASH_PAGE_126+((x/4)*4)));
+	*(uint32_t*)data = (*(__IO uint32_t*)(APP_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)));
 	return data[x%4];
 }
 
@@ -166,38 +187,57 @@ void conf_general_read_mc_configuration(mc_configuration *conf, bool is_motor_2)
 }
 
 bool conf_general_write_flash(uint8_t page, uint8_t * data, uint16_t size){
-	uint32_t word;
-	uint8_t byte=0;
-	uint8_t * word_ptr = (uint8_t*)&word;
-	uint32_t flash_incr=0;
+	if(data == NULL || size == 0u || size > PAGE_SIZE) {
+		return false;
+	}
 
-	HAL_FLASH_Unlock();
+	if(HAL_FLASH_Unlock() != HAL_OK) {
+		return false;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
 
 	uint32_t page_error = 0;
 	FLASH_EraseInitTypeDef s_eraseinit;
 	s_eraseinit.TypeErase   = FLASH_TYPEERASE_PAGES;
-	s_eraseinit.PageAddress = 0x08000000 + ((uint32_t)page*PAGE_SIZE);
+	s_eraseinit.PageAddress = 0x08000000u + ((uint32_t)page * (uint32_t)PAGE_SIZE);
 	s_eraseinit.NbPages     = 1;
-	HAL_FLASHEx_Erase(&s_eraseinit, &page_error);
 
-	for (unsigned int i = 0;i < size;i++) {
+	if(HAL_FLASHEx_Erase(&s_eraseinit, &page_error) != HAL_OK) {
+		HAL_FLASH_Lock();
+		return false;
+	}
 
-		word_ptr[byte] = data[i];
-		byte++;
-		if(byte==4){
-			byte=0;
-			HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, s_eraseinit.PageAddress+(flash_incr*4), *((uint32_t*)word_ptr));
-			word=0;
+	bool ok = true;
+	uint32_t word = 0xFFFFFFFFu;
+	uint8_t byte = 0u;
+	uint32_t flash_incr = 0u;
+	uint8_t *word_ptr = (uint8_t*)&word;
+
+	for(uint16_t i = 0u; i < size; i++) {
+		word_ptr[byte++] = data[i];
+		if(byte == 4u) {
+			if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+					s_eraseinit.PageAddress + (flash_incr * 4u), word) != HAL_OK) {
+				ok = false;
+				break;
+			}
+			word = 0xFFFFFFFFu;
+			byte = 0u;
 			flash_incr++;
 		}
 	}
-	if(byte!=0){
-		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, s_eraseinit.PageAddress+(flash_incr*4), *((uint32_t*)word_ptr));
-	}
-	HAL_FLASH_Lock();
-	return true;
-}
 
+	if(ok && byte != 0u) {
+		if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+				s_eraseinit.PageAddress + (flash_incr * 4u), word) != HAL_OK) {
+			ok = false;
+		}
+	}
+
+	HAL_FLASH_Lock();
+	return ok;
+}
 /**
  * Write app_configuration to EEPROM.
  *
@@ -239,8 +279,6 @@ bool conf_general_store_mc_configuration(mc_configuration *conf, bool is_motor_2
 	bool is_ok = true;
 
 	conf->crc = conf_calc_crc(conf);
-
-	HAL_FLASH_Unlock();
 
 	is_ok = conf_general_write_flash(CONF_PAGE, (uint8_t*)conf, sizeof(mc_configuration));
 
@@ -480,7 +518,7 @@ void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float t
 
 #ifdef G30P
 
-#define G30_CONFIG_FLASH_ADDR (ADDR_FLASH_PAGE_126 + PAGE_SIZE - sizeof(g30_sesc_config_t))
+#define G30_CONFIG_FLASH_ADDR (APP_CONFIG_FLASH_ADDR + PAGE_SIZE - sizeof(g30_sesc_config_t))
 _Static_assert(sizeof(app_configuration) + sizeof(g30_sesc_config_t) <= PAGE_SIZE,
 		"G30 config does not fit in APP flash page");
 

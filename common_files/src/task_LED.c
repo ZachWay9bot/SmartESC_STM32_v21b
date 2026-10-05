@@ -278,7 +278,16 @@ void task_LED(void * argument)
 				MCI_FaultAcknowledged(pMCI[M1]);
 				VescToSTM_set_current(0, 0);
 				STM[M1].bState = RUN;
+#ifdef G30P
+				/*
+				 * Do not energize the bridge merely because a fault was
+				 * acknowledged. The G30 dashboard interlock requires a fresh
+				 * control stream and neutral throttle before PWM can resume.
+				 */
+				VescToSTM_pwm_stop();
+#else
 				VescToSTM_pwm_start();
+#endif
 
 				last_fault = 0;
 #endif
