@@ -152,6 +152,9 @@ def test_g30_gen1_rc_safety() -> None:
         "HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_RESET);",
     )
     require_text(pwr, "stable_pressed = (last_raw == GPIO_PIN_RESET);")
+    require_text(pwr, "LONG_PRESS_MILLIS_MAX \t= 10000;")
+    require_text(pwr, "app_adc_get_decoded_level2() >= 0.80f")
+    require_text(pwr, "very_long_sent = true")
 
     # RC remains sensored-only and automatic DELTA starts disabled.
     require_text(conf, "mcconf->foc_sensor_mode = FOC_SENSOR_MODE_HALL;")
