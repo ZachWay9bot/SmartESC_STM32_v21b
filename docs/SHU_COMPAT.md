@@ -10,23 +10,29 @@ the stock Ninebot bootloader. This branch instead uses:
 
 ```
 0x08000000..0x08000FFF  stock Ninebot IAP bootloader (must already be present)
-0x08001000..0x0800DFFF  SmartESC application, max 52 KiB
-0x0800E000..0x0800E7FF  SmartESC app/motor configuration (pages 56/57)
-0x0800E800..0x0801BFFF  stock update staging area
+0x08001000..0x0800D7FF  DeltaESC application, max 50 KiB
+0x0800D800..0x0800DBFF  DeltaESC app configuration (page 54)
+0x0800DC00..0x0800DFFF  DeltaESC motor configuration (page 55)
+0x0800E000..0x0801BFFF  stock update staging area, preserved
 0x0801C000..0x0801F7FF  stock configuration/calibration region, preserved
 0x0801F800..0x0801FFFF  stock update-control region, preserved
 ```
 
-SmartESC's emulated configuration pages are moved to flash pages 56/57
-(`0x0800E000` and `0x0800E400`). The documented stock staging area begins
-at `0x0800E800`, and the stock calibration/update-control region is deliberately
-not touched.
+DeltaESC's emulated configuration pages are kept inside the stock application
+window on pages 54/55 (`0x0800D800` and `0x0800DC00`). The linker is capped
+at 50 KiB so firmware code cannot overlap those pages.
 
-The 52 KiB application ceiling is also deliberate. The stock G30 IAP start
-packet carries firmware size as a 16-bit value, and the documented ESC app
-region ends at `0x0800DFFF`. If SmartESC does not link inside this region,
-the SHU build must be slimmed down rather than silently consuming the stock
-staging area.
+This replaces the earlier pages-56/57 layout. A real 128 KiB stock G30
+DRV 1.2.6 full-flash dump has a normal application vector at `0x08001000`
+and a second firmware image in the upper-flash OTA staging area beginning at
+`0x0800E800`. Independent reverse-engineering also maps the staging region
+from `0x0800E000` through `0x0801BFFF`. DeltaESC therefore treats the
+entire upper staging region as untouchable.
+
+The stock G30 application window itself is 52 KiB, ending at `0x0800DFFF`.
+Reserving its final two pages leaves a 50 KiB executable ceiling. If DeltaESC
+does not link below `0x0800D800`, the SHU build must be slimmed down rather
+than consuming configuration or stock OTA staging space.
 
 ## Stock G30 BMS integration
 

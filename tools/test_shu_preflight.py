@@ -37,7 +37,7 @@ def checksum16(data: bytes) -> int:
 def test_layout() -> None:
     require_text(
         ROOT / "g30p" / "STM32CubeIDE" / "STM32F103C8TX_FLASH.ld",
-        "ORIGIN = 0x08001000,   LENGTH = 52K",
+        "ORIGIN = 0x08001000,   LENGTH = 50K",
     )
     require_text(
         ROOT / "g30p" / "Src" / "system_stm32f1xx.c",
@@ -45,11 +45,15 @@ def test_layout() -> None:
     )
     product = ROOT / "common_files" / "inc" / "product.h"
     require_text(product, "#define APP_PAGE")
-    require_text(product, "56")
+    require_text(product, "54")
     require_text(product, "#define CONF_PAGE")
-    require_text(product, "57")
+    require_text(product, "55")
     require_text(product, "SESC_SHU_MAX_APP_BYTES")
-    require_text(product, "(52u * 1024u)")
+    require_text(product, "(50u * 1024u)")
+    require_text(
+        ROOT / "docs" / "SHU_COMPAT.md",
+        "0x0800E000..0x0801BFFF  stock update staging area, preserved",
+    )
 
 
 def test_bms_activator_source() -> None:

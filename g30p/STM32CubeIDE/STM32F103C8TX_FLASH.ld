@@ -45,17 +45,21 @@ _Min_Stack_Size = 0x400 ; /* required amount of stack */
 /*
  * SHU-compatible G30 layout:
  *   0x08000000..0x08000FFF  stock Ninebot IAP bootloader (preserved)
- *   0x08001000..0x0800DFFF  SmartESC application (52 KiB max)
- *   0x0800E000..0x0800E7FF  SmartESC configuration (2 KiB)
- *   0x0800E800..             stock G30 update staging / calibration metadata
+ *   0x08001000..0x0800D7FF  DeltaESC application (50 KiB max)
+ *   0x0800D800..0x0800DFFF  DeltaESC configuration (2 KiB, pages 54/55)
+ *   0x0800E000..0x0801BFFF  stock G30 update staging area (preserved)
+ *   0x0801C000..0x0801F7FF  stock configuration/calibration (preserved)
+ *   0x0801F800..0x0801FFFF  stock update-control block (preserved)
  *
- * The 52 KiB application ceiling is intentional: it matches the documented
- * stock G30 IAP application region and its 16-bit firmware-size protocol.
+ * The 50 KiB linker ceiling deliberately reserves the final 2 KiB of the
+ * stock 52 KiB application window for DeltaESC configuration. A real stock
+ * DRV 1.2.6 full-flash dump confirms that upper flash from 0x0800E000 is
+ * OTA staging and must not be used for persistent DeltaESC settings.
  */
 MEMORY
 {
   RAM    (xrw)    : ORIGIN = 0x20000000,   LENGTH = 20K
-  FLASH  (rx)     : ORIGIN = 0x08001000,   LENGTH = 52K
+  FLASH  (rx)     : ORIGIN = 0x08001000,   LENGTH = 50K
 }
 
 /* Sections */
