@@ -83,7 +83,8 @@ eButtonEvent getButtonEvent()
     static uint32_t button_down_ts = 0 ;
     static uint32_t button_up_ts = 0 ;
     static bool double_pending = false ;
-    static bool button_down = false ; ;
+    static bool button_down = false ;
+    static bool very_long_sent = false ;
 
     eButtonEvent button_event = NO_PRESS ;
     uint32_t now = HAL_GetTick() ;
@@ -92,7 +93,9 @@ eButtonEvent getButtonEvent()
         button_down = !button_down ;
         if( button_down ) {
             button_down_ts = now ;
+            very_long_sent = false ;
         } else {
+            very_long_sent = false ;
             button_up_ts = now ;
             if( double_pending ) {
                 button_event = DOUBLE_PRESS ;
@@ -111,8 +114,9 @@ eButtonEvent getButtonEvent()
 	} else if (!button_down && double_pending && diff >= SINGLE_PRESS_MILLIS_MAX && diff <= LONG_PRESS_MILLIS_MAX) {
 		double_pending = false ;
 		button_event = LONG_PRESS ;
-	} else if (button_down && now - button_down_ts > LONG_PRESS_MILLIS_MAX) {
+	} else if (button_down && !very_long_sent && now - button_down_ts > LONG_PRESS_MILLIS_MAX) {
 		double_pending = false ;
+		very_long_sent = true ;
 		button_event = VERY_LONG_PRESS ;
 	}
 
@@ -169,7 +173,8 @@ void task_PWR(void *argument) {
 				   * an invalid app and remains available for a recovery flash.
 				   */
 				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
-					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
+					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A &&
+					 app_adc_get_decoded_level() <= 0.02f) {
 					  /* High-Z first; only then return the motor wiring to STAR. */
 					  VescToSTM_pwm_stop();
 					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
