@@ -943,6 +943,30 @@ static void g30_dash_send_status(port_str *port) {
 	my_uart_send_data(out, sizeof(out), port);
 }
 
+static void g30_dash_accept_control(const uint8_t *payload, uint8_t len) {
+	if(payload == NULL || len < 2u) {
+		return;
+	}
+
+	/*
+	 * Two G30 head-I/O layouts are in circulation:
+	 *   LEN >= 3: leading control byte, then throttle, brake
+	 *   LEN == 2: compact throttle, brake
+	 */
+	if(len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
+		adc1 = payload[1];
+		adc2 = payload[2];
+	} else {
+		adc1 = payload[0];
+		adc2 = payload[1];
+	}
+
+	g30_last_control_rx = xTaskGetTickCount();
+	g30_control_seen = true;
+	VescToSTM_timeout_reset();
+	app_check_timer();
+}
+
 static void g30_dash_consume_ready(port_str *port) {
 	const uint8_t len = g30_dash_rx.body[0];
 	const uint8_t src = g30_dash_rx.body[1];
@@ -951,25 +975,23 @@ static void g30_dash_consume_ready(port_str *port) {
 	const uint8_t *payload = &g30_dash_rx.body[5];
 
 	if(src == G30_DASH_ADDR_BLE && dst == G30_DASH_ADDR_ESC) {
-		if(cmd == G30_DASH_CMD_CONTROL && len >= 2u) {
+		if(cmd == G30_DASH_CMD_CONTROL) {
 			/*
-			 * The established G30 VESC bridge layout carries a leading control
-			 * byte followed by throttle and brake (LEN >= 3). A few compatible
-			 * dashboard implementations emit the compact two-byte form instead.
-			 * Both are accepted only after full 5A A5 framing/address/CRC checks.
+			 * 0x65 is used by the established G30 VESC dashboard bridges for
+			 * throttle/brake transport.
+			 */
+			g30_dash_accept_control(payload, len);
+		} else if(cmd == G30_DASH_CMD_STATUS) {
+			/*
+			 * 0x64 is the Ninebot head-I/O command. Older/stock-style traces
+			 * carry the same leading-control/throttle/brake bytes in the request,
+			 * while the ESC replies with the 0x64 display state. Accept both so
+			 * RC2 works with either dashboard dialect without weakening CRC or
+			 * source/destination validation.
 			 */
 			if(len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
-				adc1 = payload[1];
-				adc2 = payload[2];
-			} else {
-				adc1 = payload[0];
-				adc2 = payload[1];
+				g30_dash_accept_control(payload, len);
 			}
-			g30_last_control_rx = xTaskGetTickCount();
-			g30_control_seen = true;
-			VescToSTM_timeout_reset();
-			app_check_timer();
-		} else if(cmd == G30_DASH_CMD_STATUS) {
 			g30_dash_send_status(port);
 		}
 	}
