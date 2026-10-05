@@ -554,8 +554,16 @@ __weak void FOC_CalcCurrRef(uint8_t bMotor)
      // MTPA_CalcCurrRefFromIq(pMaxTorquePerAmpere[bMotor], &FOCVars[bMotor].Iqdref);
     }*/
 
-    //Battery Curren limit -- START
-    int32_t batt_i = (int32_t)((int32_t)FOCVars[bMotor].Iqdref.q * (int32_t)FW_M1.AvVolt_qd.q) / 32768;
+    //Battery Current limit -- START
+    /*
+     * Clarke/Park in this control stack is amplitude invariant, therefore
+     * electrical power is 3/2 * (Vd*Id + Vq*Iq). In the present q-axis
+     * battery-current approximation that makes the divisor 65536/1.5,
+     * not 32768. The old factor overestimated input current by 4/3 and
+     * reached a configured battery-current limit at roughly 75% of it.
+     */
+    #define BATT_I_SCALE 43691
+    int32_t batt_i = (int32_t)((int32_t)FOCVars[bMotor].Iqdref.q * (int32_t)FW_M1.AvVolt_qd.q) / BATT_I_SCALE;
     batt_i = abs(batt_i);
     int16_t q_temp = FOCVars[bMotor].Iqdref.q;
 
@@ -567,11 +575,11 @@ __weak void FOC_CalcCurrRef(uint8_t bMotor)
     }
     if(regen){
     	if((-batt_i < FOCVars[bMotor].min_i_batt) ){
-    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].min_i_batt * 32768) / (int32_t)FW_M1.AvVolt_qd.q;
+    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].min_i_batt * BATT_I_SCALE) / (int32_t)FW_M1.AvVolt_qd.q;
     	}
     }else{
     	if((batt_i > FOCVars[bMotor].max_i_batt) ){
-    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].max_i_batt * 32768) / (int32_t)FW_M1.AvVolt_qd.q;
+    		q_temp = (int32_t)((int32_t)FOCVars[bMotor].max_i_batt * BATT_I_SCALE) / (int32_t)FW_M1.AvVolt_qd.q;
     	}
     }
 

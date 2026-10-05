@@ -348,6 +348,40 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 	};
 }
 
+/*
+ * VESC-style foc_current_kp/ki are SI-domain gains (V/A and V/(A*s)).
+ * The ST current regulator works in ADC current counts and signed voltage
+ * counts, so the G30 target needs a domain conversion before loading the PI.
+ * Keep other SmartESC targets unchanged until they are audited separately.
+ */
+static void conf_general_apply_foc_current_gains(const mc_configuration *mcconf) {
+	float kp = mcconf->foc_current_kp * (float)TF_KPDIV;
+	float ki = mcconf->foc_current_ki * (float)TF_KIDIV /
+			(float)mcconf->foc_f_sw;
+
+#ifdef G30P
+	const float gain_scale =
+			65536.0f / ((float)NOMINAL_BUS_VOLTAGE_V * (float)CURRENT_FACTOR_A);
+	kp *= gain_scale;
+	ki *= gain_scale;
+
+	/* The ST gain fields are signed 16-bit. Never allow a large setting to
+	 * wrap negative and turn the current loop into positive feedback. */
+	utils_truncate_number(&kp, 0.0f, (float)INT16_MAX);
+	utils_truncate_number(&ki, 0.0f, (float)INT16_MAX);
+#endif
+
+	PIDIqHandle_M1.hKpGain = kp;
+	PIDIqHandle_M1.hKiGain = ki;
+	PIDIqHandle_M1.hDefKpGain = PIDIqHandle_M1.hKpGain;
+	PIDIqHandle_M1.hDefKiGain = PIDIqHandle_M1.hKiGain;
+
+	PIDIdHandle_M1.hKpGain = PIDIqHandle_M1.hKpGain;
+	PIDIdHandle_M1.hKiGain = PIDIqHandle_M1.hKiGain;
+	PIDIdHandle_M1.hDefKpGain = PIDIdHandle_M1.hKpGain;
+	PIDIdHandle_M1.hDefKiGain = PIDIdHandle_M1.hKiGain;
+}
+
 void conf_general_setup_mc(mc_configuration *mcconf) {
 
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
@@ -395,21 +429,13 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 	PIDSpeedHandle_M1.hDefKpGain 		  = PIDSpeedHandle_M1.hKpGain;
 	PIDSpeedHandle_M1.hDefKiGain 		  = PIDSpeedHandle_M1.hKiGain;
 
-	PIDIqHandle_M1.hKpGain          	  = mcconf->foc_current_kp * (float)TF_KPDIV;
-	PIDIqHandle_M1.hKiGain                = mcconf->foc_current_ki * (float)TF_KIDIV / (float)mcconf->foc_f_sw;
-	PIDIqHandle_M1.hDefKpGain 			  = PIDIqHandle_M1.hKpGain;
-	PIDIqHandle_M1.hDefKiGain 			  = PIDIqHandle_M1.hKiGain;
+	conf_general_apply_foc_current_gains(mcconf);
 	PIDIqHandle_M1.hUpperOutputLimit	  = INT16_MAX * mcconf->l_max_duty;
 	PIDIqHandle_M1.hLowerOutputLimit	  = -PIDIqHandle_M1.hUpperOutputLimit;
 	PIDIqHandle_M1.wUpperIntegralLimit    = (int32_t)PIDIqHandle_M1.hUpperOutputLimit * TF_KIDIV,
 	PIDIqHandle_M1.wLowerIntegralLimit    = (int32_t)-PIDIqHandle_M1.hUpperOutputLimit * TF_KIDIV,
 	FOCVars[M1].min_duty				  = INT16_MAX *mcconf->l_min_duty;
 
-
-	PIDIdHandle_M1.hKpGain             	  = PIDIqHandle_M1.hKpGain; //Torque and flux has the same P gain
-	PIDIdHandle_M1.hKiGain                = PIDIqHandle_M1.hDefKiGain; //Torque and flux has the same I gain
-	PIDIdHandle_M1.hDefKpGain 			  = PIDIdHandle_M1.hKpGain;
-	PIDIdHandle_M1.hDefKiGain 			  = PIDIdHandle_M1.hKiGain;
 	PIDIdHandle_M1.hUpperOutputLimit	  = INT16_MAX * mcconf->l_max_duty;
 	PIDIdHandle_M1.hLowerOutputLimit	  = -PIDIdHandle_M1.hUpperOutputLimit;
 	PIDIdHandle_M1.wUpperIntegralLimit    = (int32_t)PIDIdHandle_M1.hUpperOutputLimit * TF_KIDIV,
@@ -459,6 +485,10 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 
 	VescToSTM_init_odometer(mcconf);
 	mc_conf = *mcconf;
+
+	/* setup_mc resets the runtime throttle scale. Put the displayed drive mode
+	 * back in force after the live config has been copied. */
+	app_adc_apply_mode_scale();
 
 }
 
@@ -707,16 +737,7 @@ bool g30_config_apply_runtime_profile(bool delta) {
 	mc_conf.lo_in_current_max = mc_conf.l_in_current_max;
 	mc_conf.lo_in_current_min = mc_conf.l_in_current_min;
 
-	PIDIqHandle_M1.hKpGain = mc_conf.foc_current_kp * (float)TF_KPDIV;
-	PIDIqHandle_M1.hKiGain =
-			mc_conf.foc_current_ki * (float)TF_KIDIV / (float)mc_conf.foc_f_sw;
-	PIDIqHandle_M1.hDefKpGain = PIDIqHandle_M1.hKpGain;
-	PIDIqHandle_M1.hDefKiGain = PIDIqHandle_M1.hKiGain;
-
-	PIDIdHandle_M1.hKpGain = PIDIqHandle_M1.hKpGain;
-	PIDIdHandle_M1.hKiGain = PIDIqHandle_M1.hKiGain;
-	PIDIdHandle_M1.hDefKpGain = PIDIdHandle_M1.hKpGain;
-	PIDIdHandle_M1.hDefKiGain = PIDIdHandle_M1.hKiGain;
+	conf_general_apply_foc_current_gains(&mc_conf);
 
 	/* Never carry integrator energy across an electrical topology change. */
 	PIDIqHandle_M1.wIntegralTerm = 0;

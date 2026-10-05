@@ -477,7 +477,11 @@
 
 // Setup Info
 #ifndef MCCONF_SI_MOTOR_POLES
-#define MCCONF_SI_MOTOR_POLES			14 // Motor pole count
+#ifdef G30P
+#define MCCONF_SI_MOTOR_POLES			15 // G30 stock motor: 15 pole pairs / 30 poles
+#else
+#define MCCONF_SI_MOTOR_POLES			14 // Legacy default for other targets
+#endif
 #endif
 #ifndef MCCONF_SI_GEAR_RATIO
 #define MCCONF_SI_GEAR_RATIO			1 // Gear ratio

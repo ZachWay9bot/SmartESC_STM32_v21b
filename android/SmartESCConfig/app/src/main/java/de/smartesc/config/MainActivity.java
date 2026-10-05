@@ -84,7 +84,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         section(root,"Gemeinsame Limits");
         battA = field(root,"Battery current max [A]","20");
         wheelMm = field(root,"Wheel diameter [mm]","250");
-        poles = field(root,"Motor poles","14");
+        poles = field(root,"Motor pole pairs","15");
         enterKmh = field(root,"DELTA ab [km/h]","32");
         exitKmh = field(root,"STAR zurück bis [km/h]","26");
         switchIq = field(root,"Max |Iq| beim Umschalten [A]","2");
