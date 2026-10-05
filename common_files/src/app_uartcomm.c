@@ -220,8 +220,9 @@ bool app_shu_invalidate_app_vector(void) {
 }
 
 static void shu_handoff_to_stock_iap(void) {
-	/* Never enter a flasher while the wheel is moving. */
-	if(fabsf(VescToSTM_get_speed()) > 0.5f) {
+	/* Never enter a flasher while moving or with throttle held. */
+	if(fabsf(VescToSTM_get_speed()) > 0.5f ||
+	   app_adc_get_decoded_level() > 0.02f) {
 		return;
 	}
 
@@ -918,8 +919,7 @@ static void g30_dash_send_status(port_str *port) {
 		0, 0, 0, 0, 0, 0, 0, 0
 	};
 
-	float speed_kmh = VescToSTM_get_speed() * 3.6f * DIR_MUL;
-	if(speed_kmh < 0.0f) speed_kmh = 0.0f;
+	float speed_kmh = fabsf(VescToSTM_get_speed() * 3.6f);
 	if(speed_kmh > 255.0f) speed_kmh = 255.0f;
 
 	m365_to_display.speed = (uint8_t)speed_kmh;
@@ -951,13 +951,20 @@ static void g30_dash_consume_ready(port_str *port) {
 	const uint8_t *payload = &g30_dash_rx.body[5];
 
 	if(src == G30_DASH_ADDR_BLE && dst == G30_DASH_ADDR_ESC) {
-		if(cmd == G30_DASH_CMD_CONTROL && len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
+		if(cmd == G30_DASH_CMD_CONTROL && len >= 2u) {
 			/*
-			 * Stock G30 0x65 payload: byte 0 is the fixed/control field,
-			 * byte 1 throttle, byte 2 brake.
+			 * The established G30 VESC bridge layout carries a leading control
+			 * byte followed by throttle and brake (LEN >= 3). A few compatible
+			 * dashboard implementations emit the compact two-byte form instead.
+			 * Both are accepted only after full 5A A5 framing/address/CRC checks.
 			 */
-			adc1 = payload[1];
-			adc2 = payload[2];
+			if(len >= G30_DASH_CONTROL_MIN_PAYLOAD) {
+				adc1 = payload[1];
+				adc2 = payload[2];
+			} else {
+				adc1 = payload[0];
+				adc2 = payload[1];
+			}
 			g30_last_control_rx = xTaskGetTickCount();
 			g30_control_seen = true;
 			VescToSTM_timeout_reset();
