@@ -42,6 +42,14 @@
 mc_configuration mc_conf;
 app_configuration appconf;
 
+/*
+ * Configuration flash addresses must follow the target-specific APP_PAGE and
+ * CONF_PAGE definitions. The upstream code used hard-coded pages 126/127,
+ * which is correct for M365 but wrong for the reversible G30 layout.
+ */
+#define APP_CONFIG_FLASH_ADDR (0x08000000u + ((uint32_t)APP_PAGE * (uint32_t)PAGE_SIZE))
+#define MC_CONFIG_FLASH_ADDR  (0x08000000u + ((uint32_t)CONF_PAGE * (uint32_t)PAGE_SIZE))
+
 #ifdef G30P
 static g30_sesc_config_t g30_cfg;
 static bool g30_config_program_tail(void);
@@ -96,13 +104,13 @@ unsigned conf_calc_crc(mc_configuration* conf_in) {
 
 uint8_t Flash_ReadByte_MC(uint32_t x){
 	uint8_t data[4];
-	*(uint32_t*)data = (*(__IO uint32_t*)(ADDR_FLASH_PAGE_127+((x/4)*4)));
+	*(uint32_t*)data = (*(__IO uint32_t*)(MC_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)));
 	return data[x%4];
 }
 
 uint8_t Flash_ReadByte_APP(uint32_t x){
 	uint8_t data[4];
-	*(uint32_t*)data = (*(__IO uint32_t*)(ADDR_FLASH_PAGE_126+((x/4)*4)));
+	*(uint32_t*)data = (*(__IO uint32_t*)(APP_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)));
 	return data[x%4];
 }
 
@@ -488,7 +496,7 @@ void conf_general_calc_apply_foc_cc_kp_ki_gain(mc_configuration *mcconf, float t
 
 #ifdef G30P
 
-#define G30_CONFIG_FLASH_ADDR (ADDR_FLASH_PAGE_126 + PAGE_SIZE - sizeof(g30_sesc_config_t))
+#define G30_CONFIG_FLASH_ADDR (APP_CONFIG_FLASH_ADDR + PAGE_SIZE - sizeof(g30_sesc_config_t))
 _Static_assert(sizeof(app_configuration) + sizeof(g30_sesc_config_t) <= PAGE_SIZE,
 		"G30 config does not fit in APP flash page");
 
