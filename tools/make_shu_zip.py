@@ -146,7 +146,7 @@ def main() -> int:
     ap.add_argument("output", type=Path, help="output SHU ZIP")
     ap.add_argument(
         "--name",
-        default="DeltaESC G30D v0.3 RC1",
+        default="DeltaESC G30D v0.4 RC2",
         help="displayName stored in info.json",
     )
     args = ap.parse_args()
@@ -172,9 +172,9 @@ def main() -> int:
     }
 
     notes = (
-        "DeltaESC G30D v0.3 RC1 + dual STAR/DELTA profile candidate\n"
+        "DeltaESC G30D v0.4 RC2 + native G30 dashboard + dual STAR/DELTA\n"
         "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
-        "Throttle release: coast\n"
+        "Dashboard: native 5A A5 G30 framing with CRC/address validation\n"\n        "Drive interlock: fresh control stream + neutral throttle required\n"\n        "Throttle release: coast\n"
         "Brake: motor cut, no regenerative braking\n"
         "STAR/DELTA: G30 Gen1 PA15 interface; low=STAR, high=DELTA request\n"
         "Relay switching: wait for |Iq| <= 2 A, then 100 ms settle\n"
