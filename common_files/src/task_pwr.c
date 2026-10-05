@@ -78,7 +78,7 @@ eButtonEvent getButtonEvent()
 {
     static const uint32_t DOUBLE_GAP_MILLIS_MAX 	= 250;
     static const uint32_t SINGLE_PRESS_MILLIS_MAX 	= 300;
-    static const uint32_t LONG_PRESS_MILLIS_MAX 	= 5000;
+    static const uint32_t LONG_PRESS_MILLIS_MAX 	= 10000;
 
     static uint32_t button_down_ts = 0 ;
     static uint32_t button_up_ts = 0 ;
@@ -174,14 +174,21 @@ void task_PWR(void *argument) {
 				   */
 				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
 					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A &&
-					 app_adc_get_decoded_level() <= 0.02f) {
-					  /* High-Z first; only then return the motor wiring to STAR. */
+					 app_adc_get_decoded_level() <= 0.02f &&
+					 app_adc_get_decoded_level2() >= 0.80f) {
+					  /*
+					   * Deliberate recovery gesture: >10 s power-button hold
+					   * while stationary, throttle neutral and brake held.
+					   */
 					  VescToSTM_pwm_stop();
 					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
 					  if(app_shu_invalidate_app_vector()) {
 						  __disable_irq();
 						  NVIC_SystemReset();
 					  }
+				  } else {
+					  /* Ordinary very-long hold is just a safe power-off. */
+					  power_control(DEV_PWR_OFF);
 				  }
 #endif
 			  } break ;
