@@ -477,7 +477,11 @@
 
 // Setup Info
 #ifndef MCCONF_SI_MOTOR_POLES
-#define MCCONF_SI_MOTOR_POLES			14 // Motor pole count
+#ifdef G30P
+#define MCCONF_SI_MOTOR_POLES			15 // G30 pole-pair count used by SmartESC speed conversion
+#else
+#define MCCONF_SI_MOTOR_POLES			14 // Generic VESC setup default
+#endif
 #endif
 #ifndef MCCONF_SI_GEAR_RATIO
 #define MCCONF_SI_GEAR_RATIO			1 // Gear ratio
