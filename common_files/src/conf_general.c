@@ -62,6 +62,14 @@ void conf_general_init(void) {
 	DWT_CTRL |= CYCCNTENA;
 
 	MCI_StartMotor(pMCI[M1]);
+#ifdef G30P
+	/*
+	 * G30 starts high-Z. The dashboard-control interlock in app_uartcomm.c
+	 * explicitly re-enables PWM only after a fresh, checksum-valid control
+	 * stream has been seen with throttle returned to neutral.
+	 */
+	VescToSTM_pwm_stop();
+#endif
 }
 
 /**
