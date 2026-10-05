@@ -73,6 +73,7 @@
 #define DELTA_EXIT_SPEED_KMH                                                (26.0f)
 #define DELTA_SWITCH_MAX_IQ_A                                               (2.0f)
 #define DELTA_RELAY_SETTLE_MS                                               (100u)
+#define MCCONF_SI_MOTOR_POLES                                                15
 
 // Setting limits
 #define HW_LIM_CURRENT			-70.0, 70.0
