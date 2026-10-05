@@ -210,6 +210,20 @@ def test_g30_dashboard_protocol() -> None:
     assert ck == 0xFEC7
     assert len(compact + struct.pack("<H", ck)) == 11
 
+    # Older/stock-style Ninebot head-I/O trace. The request uses CMD 0x64
+    # and carries leading-control/throttle/brake bytes; checksum is known.
+    head_io = bytes([
+        0x5A, 0xA5, 0x07, 0x21, 0x20, 0x64, 0x00,
+        0x06, 0x2A, 0x29, 0x00, 0x00, 0x07, 0x01,
+    ])
+    ck = checksum16(head_io[2:])
+    assert ck == 0xFEF2
+    assert head_io + struct.pack("<H", ck) == bytes([
+        0x5A, 0xA5, 0x07, 0x21, 0x20, 0x64, 0x00,
+        0x06, 0x2A, 0x29, 0x00, 0x00, 0x07, 0x01, 0xF2, 0xFE,
+    ])
+    require_text(src, "g30_dash_accept_control(payload, len);")
+
 
 def test_recovery_order_and_drive_interlock() -> None:
     app_uart = (ROOT / "common_files" / "src" / "app_uartcomm.c").read_text(encoding="utf-8")
