@@ -343,9 +343,19 @@ void VescToSTM_pwm_start(void){
 		utils_truncate_number(&fVd, -32767, 32767);
 		PIDIqHandle_M1.wIntegralTerm = fVd * TF_KIDIV;
 		PIDIdHandle_M1.wIntegralTerm = -PIDIqHandle_M1.wIntegralTerm/4;
-		HALL_M1._Super.hElAngle = HALL_M1.MeasuredElAngle;
-		HALL_M1.CompSpeed = 0;
-		HALL_M1._Super.hAvrMecSpeedUnit = 0;
+		/*
+		 * Re-seed both Hall angle states after true coast. During PWM-off the
+		 * high-frequency FOC angle can be stale by many electrical revolutions.
+		 * CompAngle must move with hElAngle or the compensation loop sees an
+		 * artificial sector-sized error on re-engagement.
+		 */
+		const int16_t measured_el_angle = HALL_M1.MeasuredElAngle;
+		HALL_M1._Super.hElAngle = measured_el_angle;
+		HALL_M1.CompAngle = measured_el_angle;
+		if(HALL_M1._Super.hElSpeedDpp == 0) {
+			HALL_M1.CompSpeed = 0;
+			HALL_M1._Super.hAvrMecSpeedUnit = 0;
+		}
 		PWMC_SwitchOnPWM(&PWM_Handle_M1._Super);
 	}
 }
