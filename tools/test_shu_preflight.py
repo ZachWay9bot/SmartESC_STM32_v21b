@@ -245,6 +245,34 @@ def test_recovery_order_and_drive_interlock() -> None:
 
 
 
+
+def test_config_flash_symmetry() -> None:
+    conf = ROOT / "common_files" / "src" / "conf_general.c"
+    text = conf.read_text(encoding="utf-8")
+
+    require_text(conf, "#define APP_CONFIG_FLASH_ADDR")
+    require_text(conf, "((uint32_t)APP_PAGE * (uint32_t)PAGE_SIZE)")
+    require_text(conf, "#define MC_CONFIG_FLASH_ADDR")
+    require_text(conf, "((uint32_t)CONF_PAGE * (uint32_t)PAGE_SIZE)")
+    require_text(conf, "APP_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)")
+    require_text(conf, "MC_CONFIG_FLASH_ADDR + ((x / 4u) * 4u)")
+    require_text(
+        conf,
+        "#define G30_CONFIG_FLASH_ADDR (APP_CONFIG_FLASH_ADDR + PAGE_SIZE - sizeof(g30_sesc_config_t))",
+    )
+    require_text(conf, "_Static_assert(sizeof(app_configuration) <= PAGE_SIZE")
+    require_text(conf, "_Static_assert(sizeof(mc_configuration) <= PAGE_SIZE")
+    require_text(conf, "HAL_FLASHEx_Erase(&s_eraseinit, &page_error) != HAL_OK")
+    require_text(conf, "HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD")
+    forbid_text(conf, "ADDR_FLASH_PAGE_126")
+    forbid_text(conf, "ADDR_FLASH_PAGE_127")
+
+    # Writes must use the same target-specific page macros read above.
+    require_text(conf, "conf_general_write_flash(APP_PAGE")
+    require_text(conf, "conf_general_write_flash(CONF_PAGE")
+
+
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -323,6 +351,7 @@ def main() -> int:
     test_g30_gen1_rc_safety()
     test_g30_dashboard_protocol()
     test_recovery_order_and_drive_interlock()
+    test_config_flash_symmetry()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")
