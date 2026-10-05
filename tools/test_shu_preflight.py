@@ -159,6 +159,92 @@ def test_g30_gen1_rc_safety() -> None:
 
 
 
+
+def test_g30_dashboard_protocol() -> None:
+    src = ROOT / "common_files" / "src" / "app_uartcomm.c"
+    text = src.read_text(encoding="utf-8")
+
+    # Native G30 framing is deliberately separate from the legacy M365 55 AA parser.
+    require_text(src, "#define G30_DASH_HEADER0                0x5Au")
+    require_text(src, "#define G30_DASH_HEADER1                0xA5u")
+    require_text(src, "#define G30_DASH_ADDR_ESC               0x20u")
+    require_text(src, "#define G30_DASH_ADDR_BLE               0x21u")
+    require_text(src, "#define G30_DASH_CMD_STATUS             0x64u")
+    require_text(src, "#define G30_DASH_CMD_CONTROL            0x65u")
+    require_text(src, "const uint16_t expected = (uint16_t)b + 7u;")
+    require_text(src, "g30_dash_feed_byte(usart_rx_dma_buffer[rd_ptr])")
+    require_text(src, "g30_control_seen")
+    require_text(src, "g30_control_armed")
+    require_text(src, "G30_CONTROL_RX_TIMEOUT_MS")
+    require_text(src, "app_adc_get_decoded_level() > 0.02f")
+
+    # Stock-format 0x64 display update:
+    # 5A A5 LEN SRC DST CMD ARG mode batt light beep speed fault CKlo CKhi
+    status = bytes([
+        0x5A, 0xA5, 0x06, 0x20, 0x21, 0x64, 0x00,
+        0x04, 0x64, 0x00, 0x00, 0x19, 0x00,
+    ])
+    ck = checksum16(status[2:])
+    assert ck == 0xFED3
+    assert status + struct.pack("<H", ck) == bytes([
+        0x5A, 0xA5, 0x06, 0x20, 0x21, 0x64, 0x00,
+        0x04, 0x64, 0x00, 0x00, 0x19, 0x00, 0xD3, 0xFE,
+    ])
+
+    # Established G30 bridge 0x65 control layout: leading control byte,
+    # then raw throttle/brake.  LEN is payload count, so total is LEN + 9.
+    control = bytes([
+        0x5A, 0xA5, 0x03, 0x21, 0x20, 0x65, 0x00,
+        0x04, 0x80, 0x10,
+    ])
+    ck = checksum16(control[2:])
+    assert ck == 0xFEC2
+    assert len(control + struct.pack("<H", ck)) == 12
+
+    # Compatible compact two-byte throttle/brake payload is accepted as well.
+    compact = bytes([
+        0x5A, 0xA5, 0x02, 0x21, 0x20, 0x65, 0x00,
+        0x80, 0x10,
+    ])
+    ck = checksum16(compact[2:])
+    assert ck == 0xFEC7
+    assert len(compact + struct.pack("<H", ck)) == 11
+
+
+def test_recovery_order_and_drive_interlock() -> None:
+    app_uart = (ROOT / "common_files" / "src" / "app_uartcomm.c").read_text(encoding="utf-8")
+    task_pwr = (ROOT / "common_files" / "src" / "task_pwr.c").read_text(encoding="utf-8")
+    conf = ROOT / "common_files" / "src" / "conf_general.c"
+    led = ROOT / "common_files" / "src" / "task_LED.c"
+
+    # Automatic SHU handoff must go high-Z before changing DELTA -> STAR.
+    start = app_uart.index("static void shu_handoff_to_stock_iap")
+    end = app_uart.index("/*\n * SmartESC G30 companion-app protocol", start)
+    handoff = app_uart[start:end]
+    assert handoff.index("VescToSTM_pwm_stop();") < handoff.index(
+        "HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);"
+    )
+    require_text(
+        ROOT / "common_files" / "src" / "app_uartcomm.c",
+        "vTaskDelay(MS_TO_TICKS(g30_config_get()->relay_settle_ms));",
+    )
+
+    # Manual recovery follows the same ordering.
+    start = task_pwr.index("case VERY_LONG_PRESS")
+    end = task_pwr.index("case DOUBLE_PRESS", start)
+    recovery = task_pwr[start:end]
+    assert recovery.index("VescToSTM_pwm_stop();") < recovery.index(
+        "HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);"
+    )
+
+    # Boot and fault recovery remain high-Z until fresh neutral dashboard input.
+    require_text(conf, "MCI_StartMotor(pMCI[M1]);")
+    require_text(conf, "VescToSTM_pwm_stop();")
+    require_text(led, "Do not energize the bridge merely because a fault was")
+    require_text(led, "VescToSTM_pwm_stop();")
+
+
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -235,6 +321,8 @@ def main() -> int:
     test_bms_activator_source()
     test_g30_config_protocol()
     test_g30_gen1_rc_safety()
+    test_g30_dashboard_protocol()
+    test_recovery_order_and_drive_interlock()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")
