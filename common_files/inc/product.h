@@ -56,7 +56,7 @@
 #define DELTA_RELAY_ENABLE                                                  1
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
-#define SESC_SHU_MAX_APP_BYTES                                              (52u * 1024u)
+#define SESC_SHU_MAX_APP_BYTES                                              (50u * 1024u)
 #define G30_BMS_ACTIVATOR_ENABLE                                            1
 #define G30_BMS_ACTIVATOR_PERIOD_MS                                         (200u)
 #define G30_BMS_POLL_PERIOD_MS                                              (400u)
@@ -82,16 +82,21 @@
 #define HEAP_SIZE_KB 14
 #define CPU_MHZ  (64*1000000)
 /*
- * Do not use pages 126/127 here. Stock G30 reserves the last 2 KiB for
- * update-control data used by the IAP/SHU rollback path.
+ * Keep DeltaESC persistent configuration inside the stock application window.
  *
- * The stock application region ends at 0x0800DFFF (page 55). Pages 56/57
- * (0x0800E000..0x0800E7FF) are used for SmartESC app/motor configuration.
- * The documented stock update staging starts at 0x0800E800, so the normal
- * IAP staging/calibration/update-control ranges remain available.
+ * A real 128 KiB G30 DRV 1.2.6 full-flash dump confirms that the stock OTA
+ * staging region occupies upper flash from 0x0800E000 upward (an image is
+ * present from 0x0800E800 in that dump). Therefore pages 56/57 must NOT be
+ * used for DeltaESC configuration.
+ *
+ * Reserve the final two 1 KiB pages below staging:
+ *   page 54 = 0x0800D800..0x0800DBFF  app configuration
+ *   page 55 = 0x0800DC00..0x0800DFFF  motor configuration
+ *
+ * The linker is capped at 50 KiB so code can never overlap these pages.
  */
-#define APP_PAGE				56
-#define CONF_PAGE				57
+#define APP_PAGE				54
+#define CONF_PAGE				55
 #define PAGE_SIZE				0x400
 
 #endif
@@ -207,7 +212,7 @@
 #define PRODUCT_FIRMWARE_VERSION                                      		 0x0001
 #if defined(G30P) && SESC_SHU_LITE
 /*
- * The stock G30 IAP application window is only 52 KiB. The full VESC Tool
+ * The stock G30 application window is 52 KiB, with the final 2 KiB reserved here for DeltaESC configuration. The full VESC Tool
  * command/serialization stack makes SmartESC substantially larger than that,
  * so the reversible SHU image is deliberately a compact ride build.
  * The normal branch keeps VESC Tool support.
