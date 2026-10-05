@@ -163,7 +163,9 @@ def test_g30_gen1_rc_safety() -> None:
     # Stock G30 motor reconstruction uses 15 pole pairs. SmartESC's
     # si_motor_poles field is used as a pole-pair divisor in speed conversion.
     require_text(product, "#define POLE_PAIR_NUM                                                     (uint8_t)15")
-    require_text(product, "#define MCCONF_SI_MOTOR_POLES                                                15")
+    mcdef = ROOT / "common_files" / "inc" / "mcconf_default.h"
+    require_text(mcdef, "#ifdef G30P")
+    require_text(mcdef, "#define MCCONF_SI_MOTOR_POLES\t\t\t15")
 
 
 
