@@ -160,6 +160,11 @@ def test_g30_gen1_rc_safety() -> None:
     require_text(conf, "mcconf->foc_sensor_mode = FOC_SENSOR_MODE_HALL;")
     require_text(conf, "g30_cfg.flags = 0;")
 
+    # Stock G30 motor reconstruction uses 15 pole pairs. SmartESC's
+    # si_motor_poles field is used as a pole-pair divisor in speed conversion.
+    require_text(product, "#define POLE_PAIR_NUM                                                     (uint8_t)15")
+    require_text(product, "#define MCCONF_SI_MOTOR_POLES                                                15")
+
 
 
 
