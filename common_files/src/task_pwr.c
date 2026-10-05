@@ -170,8 +170,9 @@ void task_PWR(void *argument) {
 				   */
 				  if(fabsf(VescToSTM_get_speed()) < 0.5f &&
 					 fabsf(VescToSTM_get_iq()) <= DELTA_SWITCH_MAX_IQ_A) {
-					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
+					  /* High-Z first; only then return the motor wiring to STAR. */
 					  VescToSTM_pwm_stop();
+					  HAL_GPIO_WritePin(DELTA_RELAY_GPIO_Port, DELTA_RELAY_Pin, GPIO_PIN_RESET);
 					  if(app_shu_invalidate_app_vector()) {
 						  __disable_irq();
 						  NVIC_SystemReset();
