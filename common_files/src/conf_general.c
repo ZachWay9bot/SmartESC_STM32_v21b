@@ -182,38 +182,57 @@ void conf_general_read_mc_configuration(mc_configuration *conf, bool is_motor_2)
 }
 
 bool conf_general_write_flash(uint8_t page, uint8_t * data, uint16_t size){
-	uint32_t word;
-	uint8_t byte=0;
-	uint8_t * word_ptr = (uint8_t*)&word;
-	uint32_t flash_incr=0;
+	if(data == NULL || size == 0u || size > PAGE_SIZE) {
+		return false;
+	}
 
-	HAL_FLASH_Unlock();
+	if(HAL_FLASH_Unlock() != HAL_OK) {
+		return false;
+	}
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_PGERR | FLASH_FLAG_WRPERR);
 
 	uint32_t page_error = 0;
 	FLASH_EraseInitTypeDef s_eraseinit;
 	s_eraseinit.TypeErase   = FLASH_TYPEERASE_PAGES;
-	s_eraseinit.PageAddress = 0x08000000 + ((uint32_t)page*PAGE_SIZE);
+	s_eraseinit.PageAddress = 0x08000000u + ((uint32_t)page * (uint32_t)PAGE_SIZE);
 	s_eraseinit.NbPages     = 1;
-	HAL_FLASHEx_Erase(&s_eraseinit, &page_error);
 
-	for (unsigned int i = 0;i < size;i++) {
+	if(HAL_FLASHEx_Erase(&s_eraseinit, &page_error) != HAL_OK) {
+		HAL_FLASH_Lock();
+		return false;
+	}
 
-		word_ptr[byte] = data[i];
-		byte++;
-		if(byte==4){
-			byte=0;
-			HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, s_eraseinit.PageAddress+(flash_incr*4), *((uint32_t*)word_ptr));
-			word=0;
+	bool ok = true;
+	uint32_t word = 0xFFFFFFFFu;
+	uint8_t byte = 0u;
+	uint32_t flash_incr = 0u;
+	uint8_t *word_ptr = (uint8_t*)&word;
+
+	for(uint16_t i = 0u; i < size; i++) {
+		word_ptr[byte++] = data[i];
+		if(byte == 4u) {
+			if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+					s_eraseinit.PageAddress + (flash_incr * 4u), word) != HAL_OK) {
+				ok = false;
+				break;
+			}
+			word = 0xFFFFFFFFu;
+			byte = 0u;
 			flash_incr++;
 		}
 	}
-	if(byte!=0){
-		HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, s_eraseinit.PageAddress+(flash_incr*4), *((uint32_t*)word_ptr));
-	}
-	HAL_FLASH_Lock();
-	return true;
-}
 
+	if(ok && byte != 0u) {
+		if(HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD,
+				s_eraseinit.PageAddress + (flash_incr * 4u), word) != HAL_OK) {
+			ok = false;
+		}
+	}
+
+	HAL_FLASH_Lock();
+	return ok;
+}
 /**
  * Write app_configuration to EEPROM.
  *
@@ -255,8 +274,6 @@ bool conf_general_store_mc_configuration(mc_configuration *conf, bool is_motor_2
 	bool is_ok = true;
 
 	conf->crc = conf_calc_crc(conf);
-
-	HAL_FLASH_Unlock();
 
 	is_ok = conf_general_write_flash(CONF_PAGE, (uint8_t*)conf, sizeof(mc_configuration));
 
