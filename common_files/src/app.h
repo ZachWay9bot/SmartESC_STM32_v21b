@@ -35,6 +35,7 @@ void app_adc_stop_output(void);
 void app_adc_set_mode(uint8_t mode_bit);
 void app_adc_clear_mode(uint8_t mode_bit);
 void app_adc_speed_mode(uint8_t speed);
+void app_adc_apply_mode_scale(void);
 void app_adc_set_adc(uint8_t AD1, uint8_t AD2);
 void app_timer_update_period();
 void app_adc_init_timer();
