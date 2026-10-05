@@ -23,7 +23,7 @@ import zipfile
 from pathlib import Path
 
 APP_BASE = 0x08001000
-APP_LIMIT = 0x0800E000
+APP_LIMIT = 0x0800D800
 MAX_APP_SIZE = APP_LIMIT - APP_BASE
 
 DEFAULT_KEY = bytes([
@@ -174,6 +174,8 @@ def main() -> int:
     notes = (
         "DeltaESC G30D v0.2 + dual STAR/DELTA profile candidate\n"
         "Application base: 0x08001000 (stock 4 KiB IAP bootloader preserved)\n"
+        "Application limit: 0x0800D7FF (50 KiB; pages 54/55 reserved for DeltaESC config)\n"
+        "Stock OTA staging from 0x0800E000 upward is preserved\n"
         "Throttle release: coast\n"
         "Brake: motor cut, no regenerative braking\n"
         "STAR/DELTA: rear-light output, DELTA >= 32 km/h, STAR <= 26 km/h\n"
