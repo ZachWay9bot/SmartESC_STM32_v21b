@@ -20,10 +20,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y clang llvm unzip
 
-      - name: Unpack source
+      - name: Reconstruct and verify source
         run: |
+          cat standalone_g30d/archive.b64.part* | tr -d '\n\r' | base64 -d > /tmp/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip
+          echo 'e0513ca79b3d82fd845694f4f9b9019e64f7291efdb565abb7c5ee67101de371  /tmp/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip' | sha256sum -c -
+          unzip -t /tmp/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip
           mkdir -p /tmp/g30clean
-          unzip -q standalone_g30d/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip -d /tmp/g30clean
+          unzip -q /tmp/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip -d /tmp/g30clean
 
       - name: Build both safety variants
         working-directory: /tmp/g30clean
@@ -40,6 +43,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           path: |
+            /tmp/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip
             /tmp/g30clean/build/DeltaESC_G30D_v0_4_1_pwm_syncsafe.bin
             /tmp/g30clean/build/DeltaESC_G30D_v0_4_1_zero_vector_active.bin
             /tmp/g30clean/build/PREFLIGHT.txt

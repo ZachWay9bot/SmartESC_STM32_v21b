@@ -25,4 +25,4 @@ The source package contains:
 
 The observer/current-control output is **not connected to bridge CCRs** in v0.4.1. No rotating vector is commanded.
 
-Source archive: `DeltaESC_G30D_clean_v0_4_1_SOURCE.zip`
+The exact source ZIP is reconstructed in CI from the four `archive.b64.partXX` files and SHA-256 checked before it is built. The Actions artifact contains that verified source ZIP together with both binaries and preflight results.
