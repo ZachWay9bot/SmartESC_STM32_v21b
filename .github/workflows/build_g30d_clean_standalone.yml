@@ -1,0 +1,46 @@
+name: Build G30D clean standalone
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'standalone/g30d-clean-v0.4.1'
+    paths:
+      - 'standalone_g30d/**'
+      - '.github/workflows/build_g30d_clean_standalone.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang llvm unzip
+
+      - name: Unpack source
+        run: |
+          mkdir -p /tmp/g30clean
+          unzip -q standalone_g30d/DeltaESC_G30D_clean_v0_4_1_SOURCE.zip -d /tmp/g30clean
+
+      - name: Build both safety variants
+        working-directory: /tmp/g30clean
+        run: |
+          make clean
+          make
+          python3 tools/preflight.py | tee build/PREFLIGHT.txt
+          sha256sum build/*.bin | tee build/SHA256SUMS.txt
+
+      - name: Upload standalone bring-up artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeltaESC-G30D-clean-v0.4.1-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            /tmp/g30clean/build/DeltaESC_G30D_v0_4_1_pwm_syncsafe.bin
+            /tmp/g30clean/build/DeltaESC_G30D_v0_4_1_zero_vector_active.bin
+            /tmp/g30clean/build/PREFLIGHT.txt
+            /tmp/g30clean/build/SHA256SUMS.txt
