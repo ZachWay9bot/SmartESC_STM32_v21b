@@ -1,0 +1,26 @@
+name: G30D stock-IAP source audit (no firmware flash)
+on:
+  push:
+    branches:
+      - research/g30d-ebics-sensorless-source-only-2026-10-09
+  workflow_dispatch:
+jobs:
+  source_only_audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove upstream G30P is NOT stock-IAP compatible
+        shell: bash
+        run: |
+          set +e
+          python3 tools/audit_g30d_stock_layout.py . > audit.txt 2>&1
+          rc=$?
+          set -e
+          cat audit.txt
+          test "$rc" -eq 1
+          grep -q 'FAIL stock bootloader' audit.txt
+          grep -q 'FAIL stock update metadata' audit.txt
+          grep -q 'FAIL sensorless' audit.txt
+          echo "PASS: G30P full-flash/metadata/Hall port correctly BLOCKED"
