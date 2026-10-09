@@ -23,7 +23,7 @@ config = cfg.read_text(errors="replace")
 pindefs = pins.read_text(errors="replace")
 motor = mc.read_text(errors="replace")
 match = re.search(
-    r"FLASH\\s*\\(rx\\)\\s*:\\s*ORIGIN\\s*=\\s*(0x[0-9a-fA-F]+)\\s*,\\s*LENGTH\\s*=\\s*(\\d+)K",
+    r"FLASH\s*\(rx\)\s*:\s*ORIGIN\s*=\s*(0x[0-9a-fA-F]+)\s*,\s*LENGTH\s*=\s*(\d+)K",
     linker,
 )
 if not match:
@@ -33,7 +33,7 @@ origin, capacity = int(match.group(1), 16), int(match.group(2)) * 1024
 g30 = config.split("#ifdef G30P", 1)[-1].split("#endif", 1)[0]
 pages = {
     name: int(num) for name, num in re.findall(
-        r"#define\\s+(APP_PAGE|CONF_PAGE)\\s+(\\d+)", g30
+        r"#define\s+(APP_PAGE|CONF_PAGE)\s+(\d+)", g30
     )
 }
 print("Origin:", hex(origin), "| flash allocation:", capacity, "bytes")
