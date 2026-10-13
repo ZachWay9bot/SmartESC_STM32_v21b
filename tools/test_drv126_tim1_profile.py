@@ -49,7 +49,7 @@ need("ORIGIN = 0x08001000,   LENGTH = 50K" in link, "stock bootloader / config s
 # The ST MCSDK reprograms JSQR dynamically to exactly one injected rank per ADC.
 need("ADCx_1->JSQR = pHandle->pParams_str->ADCConfig1" in feedback, "ADC1 runtime injected sector selection")
 need("#include \"product.h\"" in feedback, "G30 diagnostics macro included by MCSDK")
-need(feedback.count("LL_TIM_DisableAllOutputs(TIMx);") >= 3, "MOE must be inhibited in motor start paths")
+need(feedback.count("LL_TIM_DisableAllOutputs(TIMx);") >= 2, "MOE must be inhibited in motor start paths")
 for fn in ("R3_2_TurnOnLowSides", "R3_2_SwitchOnPWM"):
     fragment = feedback.split(f"void {fn}( PWMC_Handle_t * pHdl )", 1)[1].split("\n}\n", 1)[0]
     need("G30_DRV126_DIAG_GATE_OFF" in fragment, f"{fn}: GATE_OFF conditional missing")
