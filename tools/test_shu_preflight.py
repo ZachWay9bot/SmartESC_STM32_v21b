@@ -111,6 +111,52 @@ def test_g30_config_protocol() -> None:
     require_text(delta, "cfg->relay_settle_ms")
 
 
+
+def test_g30_control_safety_fixes() -> None:
+    product = (ROOT / "common_files" / "inc" / "product.h").read_text(encoding="utf-8")
+    mcconf = (ROOT / "common_files" / "inc" / "mcconf_default.h").read_text(encoding="utf-8")
+    vesc = (ROOT / "common_files" / "src" / "VescToSTM.c").read_text(encoding="utf-8")
+    tasks = (ROOT / "common_files" / "src" / "mc_tasks.c").read_text(encoding="utf-8")
+    app = (ROOT / "common_files" / "src" / "app.c").read_text(encoding="utf-8")
+    conf = (ROOT / "common_files" / "src" / "conf_general.c").read_text(encoding="utf-8")
+
+    # Stock G30 motor has 15 pole pairs (30 poles). Keep the G30-specific
+    # hardware constant and VESC-style setup default aligned.
+    g30_product = product.split("#ifdef G30P", 1)[1].split("#endif", 1)[0]
+    assert "POLE_PAIR_NUM" in g30_product
+    assert "(uint8_t)15" in g30_product
+    assert "15 // G30 stock motor: 15 pole pairs / 30 poles" in mcconf
+
+    # Never regress to the old mixed-unit thermal map, which used a battery
+    # voltage threshold as the temperature endpoint and could invert torque.
+    assert "fp.temp_cut_end" in vesc
+    assert "utils_map_int(temp, fp.temp_cut_start, fp.battery_cut_end" not in vesc
+
+    # True-coast restart must move both angle states together.
+    assert "HALL_M1.CompAngle = measured_el_angle;" in vesc
+
+    # Battery-current estimate uses P = 3/2 * Vq*Iq for the amplitude-invariant
+    # Clarke/Park scaling used by this control stack.
+    assert "#define BATT_I_SCALE 43691" in tasks
+    assert "max_i_batt * BATT_I_SCALE" in tasks
+    assert "min_i_batt * BATT_I_SCALE" in tasks
+
+    # G30 current PI gains are stored in SI units but the ST regulator consumes
+    # ADC/s16-domain gains. The conversion and int16 clamps are required.
+    assert "NOMINAL_BUS_VOLTAGE_V" in conf
+    assert "65536.0f /" in conf
+    assert "CURRENT_FACTOR_A" in conf
+    assert "utils_truncate_number(&kp, 0.0f, (float)INT16_MAX)" in conf
+    assert "utils_truncate_number(&ki, 0.0f, (float)INT16_MAX)" in conf
+
+    # A config reload must not silently reset Eco/Drive current scaling.
+    assert "app_adc_apply_mode_scale();" in conf
+
+    # APP_ADC must terminate before APP_ADC_UART.
+    adc = app.split("case APP_ADC:", 1)[1].split("case APP_ADC_UART:", 1)[0]
+    assert "task_app_init(&aux_uart);" in adc
+    assert "break;" in adc
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).
@@ -186,6 +232,7 @@ def main() -> int:
     test_layout()
     test_bms_activator_source()
     test_g30_config_protocol()
+    test_g30_control_safety_fixes()
     test_iap_start_vector()
     test_ninebottea_and_zip()
     print("SHU preflight: PASS")

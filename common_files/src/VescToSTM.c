@@ -106,11 +106,27 @@ bool VescToSTM_overspeed(){
 
 int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 
-	//Do temperature Iq limit
+	// Do temperature Iq limit. NTC ADC digits fall as temperature rises.
 	uint16_t temp = NTC_GetAvTemp_d(pMCT[M1]->pTemperatureSensor);
 	if(temp < fp.temp_cut_start){
 		app_adc_set_mode(M365_MODE_TEMP);
-		iq = utils_map_int(temp, fp.temp_cut_start, fp.battery_cut_end, 0, iq);
+
+		/*
+		 * Taper current from 100% at temp_cut_start to 0% at temp_cut_end.
+		 * The old code accidentally used battery_cut_end as the temperature
+		 * endpoint. Besides mixing unrelated units, utils_map_int() can
+		 * extrapolate past zero and invert the sign of the requested torque.
+		 * Clamp the fraction explicitly and preserve the sign of iq.
+		 */
+		const int32_t span = (int32_t)fp.temp_cut_start - (int32_t)fp.temp_cut_end;
+		if(span > 0) {
+			int32_t num = (int32_t)temp - (int32_t)fp.temp_cut_end;
+			if(num < 0) num = 0;
+			if(num > span) num = span;
+			iq = (int16_t)(((int32_t)iq * num) / span);
+		} else {
+			iq = 0;
+		}
 	}else{
 		app_adc_clear_mode(M365_MODE_TEMP);
 	}
@@ -343,9 +359,19 @@ void VescToSTM_pwm_start(void){
 		utils_truncate_number(&fVd, -32767, 32767);
 		PIDIqHandle_M1.wIntegralTerm = fVd * TF_KIDIV;
 		PIDIdHandle_M1.wIntegralTerm = -PIDIqHandle_M1.wIntegralTerm/4;
-		HALL_M1._Super.hElAngle = HALL_M1.MeasuredElAngle;
-		HALL_M1.CompSpeed = 0;
-		HALL_M1._Super.hAvrMecSpeedUnit = 0;
+		/*
+		 * Re-seed both Hall angle states after true coast. During PWM-off the
+		 * high-frequency FOC angle can be stale by many electrical revolutions.
+		 * CompAngle must move with hElAngle or the compensation loop sees an
+		 * artificial sector-sized error on re-engagement.
+		 */
+		const int16_t measured_el_angle = HALL_M1.MeasuredElAngle;
+		HALL_M1._Super.hElAngle = measured_el_angle;
+		HALL_M1.CompAngle = measured_el_angle;
+		if(HALL_M1._Super.hElSpeedDpp == 0) {
+			HALL_M1.CompSpeed = 0;
+			HALL_M1._Super.hAvrMecSpeedUnit = 0;
+		}
 		PWMC_SwitchOnPWM(&PWM_Handle_M1._Super);
 	}
 }

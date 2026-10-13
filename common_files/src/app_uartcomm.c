@@ -1074,6 +1074,28 @@ void app_adc_speed_mode(uint8_t speed){
 	m365_to_display.mode |= speed;
 }
 
+/*
+ * conf_general_setup_mc() rebuilds the live motor configuration and resets
+ * lo_current_max_scale to 1.0. Restore the scale that belongs to the mode the
+ * dashboard still shows, otherwise a config write or motor detection can
+ * silently grant full-current throttle until the next mode-button press.
+ */
+void app_adc_apply_mode_scale(void){
+	switch(m365_to_display.mode & 0x07){
+	case M365_MODE_SLOW:
+		mc_conf.lo_current_max_scale = mc_conf.modes_curr_scale[0];
+		break;
+	case M365_MODE_DRIVE:
+		mc_conf.lo_current_max_scale = mc_conf.modes_curr_scale[1];
+		break;
+	case M365_MODE_SPORT:
+		mc_conf.lo_current_max_scale = mc_conf.modes_curr_scale[2];
+		break;
+	default:
+		break;
+	}
+}
+
 uint32_t app_updaterate(){
 	return 2000 / config.update_rate_hz;
 }
