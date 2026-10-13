@@ -36,6 +36,12 @@ In the diagnostic build, the six PWM pins are explicitly written LOW and initial
 
 AOE intentionally stays OFF because enabling automatic reassertion of MOE before characterizing protections is unjustified. We are **not** claiming register-for-register stock equivalence.
 
+## ADC finding after source tracing
+
+The original DRV126 initializes ADC1 injected CH3/RANK1 and ADC2 injected CH5/RANK1 (stock instructions at 0x080058F6..0x0800591A). The generated SmartESC MX_ADC1/2_Init code starts with three injected ranks. **However** MCSDK `R3_2_TIMx_UP_IRQHandler` dynamically overwrites ADC1/2->JSQR on each sector update, selecting a single channel per ADC and reading ADC1->JDR1 / ADC2->JDR1. Therefore the initial 3-rank setup is not, by itself, proof of a broken control loop and is intentionally NOT overwritten in this patch.
+
+Found and fixed a separate concrete defect in shared MCSDK current-feedback code: `R3_2_GetPhaseCurrents()` compared phase A current to its OverCurrent threshold twice while skipping phase B. Now checks Ia, Ib, Ic separately. This shared source is used by G30 and may be used by M365; compile regression for M365 is required too. This static fix does not prove the trip threshold or gate-off response is correct.
+
 ## CI and tests
 
 `python3 tools/test_drv126_tim1_profile.py` checks parameter propagation, static pin inhibit, and stock flash window. The GitHub workflow builds the G30 target and, if it succeeds, uploads a diagnostic-only BIN and SHU ZIPv3. These are not released motor firmware images. No changes to M365 target.
