@@ -21,6 +21,8 @@ msp = src("g30p/Src/stm32f1xx_hal_msp.c")
 f10 = src("common_files/inc/parameters_conversion_f10x.h")
 conv = src("common_files/inc/parameters_conversion.h")
 link = src("g30p/STM32CubeIDE/STM32F103C8TX_FLASH.ld")
+feedback = src("common_files/MotorControl/MCSDK/MCLib/F1xx/Src/r3_2_f1xx_pwm_curr_fdbk.c")
+mc_params = src("common_files/src/mc_parameters.c")
 
 # Source profile: only G30 changes. M365 keeps 16 kHz.
 need(re.search(r"#if defined\(G30P\) && G30_DRV126_TIMING_PROFILE\s+.*?#define PWM_FREQUENCY\s+8000\s+#else\s+#define PWM_FREQUENCY\s+16000", drive, re.S), "G30/M365 frequencies")
@@ -44,5 +46,15 @@ need(msp.count("GPIO_MODE_OUTPUT_PP;") >= 2, "PWM gate-off must actively drive l
 need("HAL_GPIO_WritePin(GPIOA, M1_PWM_UH_Pin|M1_PWM_VH_Pin|M1_PWM_WH_Pin, GPIO_PIN_RESET)" in msp, "high-side gates low")
 need("HAL_GPIO_WritePin(GPIOB, M1_PWM_UL_Pin|M1_PWM_VL_Pin|M1_PWM_WL_Pin, GPIO_PIN_RESET)" in msp, "low-side gates low")
 need("ORIGIN = 0x08001000,   LENGTH = 50K" in link, "stock bootloader / config separation")
+# The ST MCSDK reprograms JSQR dynamically to exactly one injected rank per ADC.
+need("ADCx_1->JSQR = pHandle->pParams_str->ADCConfig1" in feedback, "ADC1 runtime injected sector selection")
+need("ADCx_2->JSQR = pHandle->pParams_str->ADCConfig2" in feedback, "ADC2 runtime injected sector selection")
+need("&ADC1->JDR1" in mc_params and "&ADC2->JDR1" in mc_params, "current feedback uses rank1")
+
+# Regression: all A/B/C phase currents must be checked for software overcurrent.
+oc = feedback.split("if(pHandle->_Super.OverCurrent && ", 1)[1].split("){", 1)[0]
+for name in ("Ia", "Ib", "Ic"):
+    need(oc.count(f"abs(pHandle->_Super.{name})") == 1, f"missing/duplicate {name} overcurrent check")
+
 print("PASS: G30 DRV126 TIM1 source profile is self-consistent and GATE_OFF in this build")
 print("NOT VERIFIED: live RCC/TIM1 CKD, ADC windows, gate-driver polarity, Hall mapping, motor run")
