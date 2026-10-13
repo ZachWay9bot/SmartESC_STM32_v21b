@@ -29,6 +29,11 @@ jobs:
             --name "G30 DRV126 TIMING UNVALIDATED GATE OFF" \
             --params-file docs/G30_DRV126_GATE_OFF_PARAMS.txt
           sha256sum G30_DRV126_TIMING_GATE_OFF.bin G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip > SHA256SUMS.txt
+      - name: Build M365 regression target (shared MCSDK overcurrent fix)
+        uses: docker://wsbu/stm32cubeide:latest
+        with:
+          entrypoint: /opt/stm32cubeide/stm32cubeide
+          args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
       - name: Publish diagnostic artifacts - NOT FOR RIDING
         uses: actions/upload-artifact@v4
         with:
