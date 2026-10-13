@@ -6,6 +6,7 @@ Timer deadtime: DTG 0x40, CKD=DIV1 assumption, nominal 1 us at 64 MHz.
 TIM1 MOE may be changed by motor library, but PWM GPIO alternate functions are deliberately disabled.
 PA8 PA9 PA10 PB13 PB14 PB15 configured OUTPUT_PP LOW in initializers.
 STAR/DELTA relay actuation disabled (fixed STAR position).
+MCSDK current-feedback software overcurrent condition checks A/B/C (fixed repeated A check).
 AOE kept disabled; source differs from stock AOE=1.
 Stock TIM1 CKD, ADC injected sequence, physical driver polarity not electrically validated.
 Includes NinebotTEA encrypted and unencrypted FIRM files for SHU ZIPv3 format.
