@@ -10,6 +10,11 @@
 
 #ifdef G30P
 
+/* DRV126 reverse-engineered timing experiment. Not a ride release. */
+#define G30_DRV126_TIMING_PROFILE                                          1
+/* Keep all six gate-input GPIOs actively LOW, even if TIM1.MOE is set. */
+#define G30_DRV126_DIAG_GATE_OFF                                           1
+
 #define VBUS_ADC_CHANNEL                                                     MC_ADC_CHANNEL_1
 #define VOLTAGE_DIVIDER_GAIN     											 (float)3363.5
 
@@ -53,7 +58,7 @@
  * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
  */
 #define SESC_NO_REGEN                                                       1
-#define DELTA_RELAY_ENABLE                                                  1
+#define DELTA_RELAY_ENABLE                                                  0 /* Disable relay actuation in GATE_OFF diagnostic profile */
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
 #define SESC_SHU_MAX_APP_BYTES                                              (50u * 1024u)
