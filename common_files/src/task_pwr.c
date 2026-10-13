@@ -130,6 +130,20 @@ void task_PWR(void *argument) {
 
 	if(main_loop_counter > 40){
 		main_loop_counter=0;
+#if defined(G30P)
+		/*
+		 * Real G30D SWD measurements did not show a button transition on
+		 * either the inherited PC14 input or the earlier PA12 hypothesis.
+		 * The physical dashboard button is wired on the dashboard side and
+		 * its user actions arrive through the native dashboard protocol.
+		 *
+		 * Therefore do not interpret an unproven ESC GPIO as a local button.
+		 * This also disables the old very-long-press app-vector invalidation
+		 * path on G30. Automatic authenticated SHU/IAP handoff remains in the
+		 * dashboard protocol path.
+		 */
+		(void)argument;
+#else
 		switch( getButtonEvent() ){
 			  case NO_PRESS : break ;
 			  case SINGLE_PRESS : {
@@ -193,13 +207,16 @@ void task_PWR(void *argument) {
 				  MCI_ExecSpeedRamp(pMCI[M1], VescToSTM_erpm_to_speed(mc_conf.lo_max_erpm), 0);
 			  } break ;
 		 }
+#endif
 	}
 	main_loop_counter++;
 }
 
 void task_PWR_init(port_str * port) {
-	/* Check button pressed state at startup */
+#if !defined(G30P)
+	/* M365-family local button input. G30 dashboard button is not read here. */
 	buttonState();
+#endif
 
     /* Power ON board temporarily, ultimate decision to keep hardware ON or OFF is made later */
 	power_control(DEV_PWR_ON);
@@ -217,7 +234,15 @@ void power_control(uint8_t pwr)
 
 		vTaskDelay(1);
 
+#if !defined(G30P)
+		/* M365-family behavior: wait until the local button input is released. */
 		while(HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port, PWR_BTN_Pin));
+#endif
+		/*
+		 * G30: do not wait on PC14/PA12. Neither has been demonstrated to be
+		 * the dashboard button input on the real G30D. Drop the existing
+		 * board power-hold output directly when shutdown is requested.
+		 */
 		HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_RESET);
 		while(1);
 	} else if(pwr == DEV_PWR_RESTART) {
