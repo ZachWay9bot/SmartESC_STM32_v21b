@@ -58,7 +58,7 @@
  * Hardware is fail-safe: GPIO low (RESET) = STAR, released/high = DELTA.
  */
 #define SESC_NO_REGEN                                                       1
-#define DELTA_RELAY_ENABLE                                                  1
+#define DELTA_RELAY_ENABLE                                                  0 /* Fixed STAR while GATE_OFF diagnostics are active */
 #define SESC_SHU_COMPAT                                                     1
 #define SESC_SHU_LITE                                                       1
 #define SESC_SHU_MAX_APP_BYTES                                              (50u * 1024u)
