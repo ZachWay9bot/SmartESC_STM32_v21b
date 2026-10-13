@@ -10,6 +10,11 @@
 
 #ifdef G30P
 
+/* DRV126 reverse-engineered timing experiment. Diagnostic only, not a ride release. */
+#define G30_DRV126_TIMING_PROFILE                                          1
+/* Double inhibit: keep all six gate-input GPIOs LOW and force TIM1 MOE off in motor-enable paths. */
+#define G30_DRV126_DIAG_GATE_OFF                                           1
+
 #define VBUS_ADC_CHANNEL                                                     MC_ADC_CHANNEL_1
 #define VOLTAGE_DIVIDER_GAIN     											 (float)3363.5
 
