@@ -420,7 +420,14 @@ static void MX_TIM1_Init(void)
   htim1.Init.Prescaler = ((TIM_CLOCK_DIVIDER) - 1);
   htim1.Init.CounterMode = TIM_COUNTERMODE_CENTERALIGNED1;
   htim1.Init.Period = ((PWM_PERIOD_CYCLES) / 2);
+#if defined(G30P) && G30_DRV126_TIMING_PROFILE
+  /* In this experiment TIM1 CKD=00, so DTG=0x40 is 1 us at 64 MHz.
+   * Stock CKD has not yet been observed live; this is NOT claimed parity.
+   */
+  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+#else
   htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV2;
+#endif
   htim1.Init.RepetitionCounter = (REP_COUNTER);
   htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim1) != HAL_OK)
@@ -471,9 +478,17 @@ static void MX_TIM1_Init(void)
   sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_ENABLE;
   sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_ENABLE;
   sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_1;
+#if defined(G30P) && G30_DRV126_TIMING_PROFILE
+  /* DRV126 app 0x0800495c uses DTG=0x40. Compare tDTS on hardware. */
+  sBreakDeadTimeConfig.DeadTime = 0x40;
+#else
   sBreakDeadTimeConfig.DeadTime = ((DEAD_TIME_COUNTS) / 2);
+#endif
   sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
   sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_LOW;
+  /* Deliberately retain AOE=0 (safer inhibit). Stock initial BDTR has AOE=1;
+   * re-enabling automatic MOE without electrical fault characterization is not justified.
+   */
   sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
   if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK)
   {
