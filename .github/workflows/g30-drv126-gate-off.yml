@@ -26,7 +26,8 @@ jobs:
           python3 tools/make_shu_zip.py \
             G30_DRV126_TIMING_GATE_OFF.bin \
             G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip \
-            --name "G30 DRV126 TIMING UNVALIDATED GATE OFF"
+            --name "G30 DRV126 TIMING UNVALIDATED GATE OFF" \
+            --params-file docs/G30_DRV126_GATE_OFF_PARAMS.txt
           sha256sum G30_DRV126_TIMING_GATE_OFF.bin G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip > SHA256SUMS.txt
       - name: Publish diagnostic artifacts - NOT FOR RIDING
         uses: actions/upload-artifact@v4
