@@ -55,7 +55,15 @@
 /**************************    DRIVE SETTINGS SECTION   **********************/
 /* PWM generation and current reading */
 
+#if defined(G30P) && G30_DRV126_TIMING_PROFILE
+/* Stock DRV126 TIM1 ARR=4000 at 64 MHz in center-aligned mode => 8 kHz.
+ * MCU / PWM actual timing still requires live SWD verification.
+ * The ST Motor Control SDK uses PWM_FREQUENCY across its FOC and ADC timing.
+ */
+#define PWM_FREQUENCY   8000
+#else
 #define PWM_FREQUENCY   16000
+#endif
 #define PWM_FREQ_SCALING 1
 
 #define LOW_SIDE_SIGNALS_ENABLING        LS_PWM_TIMER
