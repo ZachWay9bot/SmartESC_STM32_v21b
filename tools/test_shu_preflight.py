@@ -157,6 +157,15 @@ def test_g30_control_safety_fixes() -> None:
     assert "task_app_init(&aux_uart);" in adc
     assert "break;" in adc
 
+    # Real G30D SWD evidence did not identify PC14 or PA12 as a direct
+    # dashboard-button input. G30 must not drive mode/recovery actions from
+    # the inherited local GPIO button state.
+    pwr = (ROOT / "common_files" / "src" / "task_pwr.c").read_text(encoding="utf-8")
+    assert "do not interpret an unproven ESC GPIO as a local button" in pwr
+    assert "#if defined(G30P)" in pwr
+    assert "#if !defined(G30P)" in pwr
+    assert "Automatic authenticated SHU/IAP handoff remains" in pwr
+
 def test_iap_start_vector() -> None:
     # Public G30 IAP example: size 33388 (0x826C), version 0x060D.
     # Old/public tooling convention uses LEN=8 (4 routing bytes + 4 payload).

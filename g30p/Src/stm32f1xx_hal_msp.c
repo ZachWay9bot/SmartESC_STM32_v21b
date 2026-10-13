@@ -367,12 +367,25 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     PA10     ------> TIM1_CH3
     */
     GPIO_InitStruct.Pin = M1_PWM_UL_Pin|M1_PWM_VL_Pin|M1_PWM_WL_Pin;
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+    /* TIM1's alternate function is physically disconnected on all gate inputs.
+     * OUTPUT_PP LOW persists even if motor code subsequently sets BDTR.MOE.
+     */
+    HAL_GPIO_WritePin(GPIOB, M1_PWM_UL_Pin|M1_PWM_VL_Pin|M1_PWM_WL_Pin, GPIO_PIN_RESET);
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+#else
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+#endif
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     GPIO_InitStruct.Pin = M1_PWM_UH_Pin|M1_PWM_VH_Pin|M1_PWM_WH_Pin;
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+    HAL_GPIO_WritePin(GPIOA, M1_PWM_UH_Pin|M1_PWM_VH_Pin|M1_PWM_WH_Pin, GPIO_PIN_RESET);
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+#else
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+#endif
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 

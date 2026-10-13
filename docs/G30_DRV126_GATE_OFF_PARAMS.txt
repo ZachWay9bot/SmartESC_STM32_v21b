@@ -1,0 +1,13 @@
+G30D Gen1 / DRV126 TIM1 timing experiment - DIAGNOSTIC GATE OFF
+STATUS: UNVALIDATED - NOT FOR RIDING - NO MOTOR OR LOAD TEST
+Firmware type: G30 STM32 application at 0x08001000; stock IAP preserved.
+G30 PWM/FOC timebase: nominal 8 kHz, ARR 4000 at 64 MHz center-aligned.
+Timer deadtime: DTG 0x40, CKD=DIV1 assumption, nominal 1 us at 64 MHz.
+TIM1 MOE may be changed by motor library, but PWM GPIO alternate functions are deliberately disabled.
+PA8 PA9 PA10 PB13 PB14 PB15 configured OUTPUT_PP LOW in initializers.
+STAR/DELTA relay actuation disabled (fixed STAR position).
+MCSDK current-feedback software overcurrent condition checks A/B/C (fixed repeated A check).
+AOE kept disabled; source differs from stock AOE=1.
+Stock TIM1 CKD, ADC injected sequence, physical driver polarity not electrically validated.
+Includes NinebotTEA encrypted and unencrypted FIRM files for SHU ZIPv3 format.
+Do not send motor-start or throttle commands. See docs/G30_DRV126_TIMING_GATE_OFF.md.

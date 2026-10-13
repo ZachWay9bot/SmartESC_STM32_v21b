@@ -149,6 +149,7 @@ def main() -> int:
         default="DeltaESC G30D v0.2",
         help="displayName stored in info.json",
     )
+    ap.add_argument("--params-file", type=Path, default=None, help="custom params.txt for experimental builds")
     args = ap.parse_args()
 
     plain = args.firmware.read_bytes()
@@ -187,6 +188,12 @@ def main() -> int:
         f"Initial SP: 0x{sp:08X}\n"
         f"Reset handler: 0x{reset:08X}\n"
     )
+
+    if args.params_file is not None:
+        notes = (args.params_file.read_text(encoding="utf-8").rstrip("\n") + "\n" +
+                 f"Image size: {len(plain)} bytes\n" +
+                 f"Initial SP: 0x{sp:08X}\n" +
+                 f"Reset handler: 0x{reset:08X}\n")
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
