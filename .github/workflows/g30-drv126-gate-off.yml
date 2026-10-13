@@ -1,0 +1,47 @@
+name: G30 DRV126 timing experiment GATE_OFF
+on:
+  push:
+    branches:
+      - experiment/g30-drv126-tim1-profile-2026-10-13
+      - integration/g30-drv126-evidence-v2-2026-10-14
+  workflow_dispatch:
+
+jobs:
+  g30-gate-off:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm known G30 gate-off source profile
+        run: |
+          python3 tools/test_drv126_tim1_profile.py
+          python3 tools/test_shu_preflight.py
+      - name: Build G30 with STM32CubeIDE
+        uses: docker://wsbu/stm32cubeide:latest
+        with:
+          entrypoint: /opt/stm32cubeide/stm32cubeide
+          args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
+      - name: Verify binary and package diagnostic ZIPv3
+        run: |
+          test -s g30p/STM32CubeIDE/Debug/g30p.bin
+          cp g30p/STM32CubeIDE/Debug/g30p.bin G30_DRV126_TIMING_GATE_OFF.bin
+          python3 tools/make_shu_zip.py \
+            G30_DRV126_TIMING_GATE_OFF.bin \
+            G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip \
+            --name "G30 DRV126 TIMING UNVALIDATED GATE OFF" \
+            --params-file docs/G30_DRV126_GATE_OFF_PARAMS.txt
+          sha256sum G30_DRV126_TIMING_GATE_OFF.bin G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip > SHA256SUMS.txt
+      - name: Build M365 regression target (shared MCSDK overcurrent fix)
+        uses: docker://wsbu/stm32cubeide:latest
+        with:
+          entrypoint: /opt/stm32cubeide/stm32cubeide
+          args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build m365/Debug -importAll /github/workspace/
+      - name: Publish diagnostic artifacts - NOT FOR RIDING
+        uses: actions/upload-artifact@v4
+        with:
+          name: G30-DRV126-TIMING-GATE-OFF-NOT-MOTOR-RELEASE
+          retention-days: 14
+          path: |
+            G30_DRV126_TIMING_GATE_OFF.bin
+            G30_DRV126_TIMING_GATE_OFF_SHU_V3.zip
+            SHA256SUMS.txt
+            docs/G30_DRV126_TIMING_GATE_OFF.md
