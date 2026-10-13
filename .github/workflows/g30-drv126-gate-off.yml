@@ -4,6 +4,7 @@ on:
     branches:
       - experiment/g30-drv126-tim1-profile-2026-10-13
       - integration/g30-drv126-evidence-v2-2026-10-14
+      - tooling/g30-swd-decode-2026-10-14
   workflow_dispatch:
 
 jobs:
@@ -15,6 +16,7 @@ jobs:
         run: |
           python3 tools/test_drv126_tim1_profile.py
           python3 tools/test_shu_preflight.py
+          python3 tools/decode_g30_swd_capture.py --self-test
       - name: Build G30 with STM32CubeIDE
         uses: docker://wsbu/stm32cubeide:latest
         with:

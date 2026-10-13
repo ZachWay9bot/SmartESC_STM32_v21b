@@ -22,6 +22,24 @@ Compress-Archive -Path G30_stock_SWD\* -DestinationPath G30_stock_SWD.zip -Force
 
 `--upload` reads memory into a local file. No `--download`, `--write`, `--erase`, or `--reset` is used.
 
+
+## Decode the capture
+
+The repository now contains a host-side decoder. It only reads the capture files and does not access ST-Link:
+
+```powershell
+python tools\decode_g30_swd_capture.py G30_stock_SWD.zip
+```
+
+For a register-by-register comparison against a later GATE_OFF capture:
+
+```powershell
+python tools\decode_g30_swd_capture.py G30_stock_SWD.zip --compare G30_gateoff_SWD.zip
+```
+
+Use `--json` when the decoded values should be archived or attached to a debug report. The decoder extracts TIM1 CR1/ARR/RCR/CCR4/BDTR, RCC CFGR, ADC CR2/JSQR, gate-pin GPIO modes/levels, AFIO MAPR and USART2 configuration without touching the controller.
+
+
 Important: USART2 starts at **0x40004408**, skipping SR/DR; do not read USART2 DR (0x40004404) on a running link, as it may consume data. ADC regions stop before injected data registers (JDR1 at +0x3C). Some diagnostic reads may still disturb MCU timing. Decode 32-bit little-endian values at documented offsets.
 
 ## Addresses for manual comparison
