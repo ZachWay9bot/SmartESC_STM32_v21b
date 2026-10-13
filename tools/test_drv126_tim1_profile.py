@@ -48,6 +48,13 @@ need("HAL_GPIO_WritePin(GPIOB, M1_PWM_UL_Pin|M1_PWM_VL_Pin|M1_PWM_WL_Pin, GPIO_P
 need("ORIGIN = 0x08001000,   LENGTH = 50K" in link, "stock bootloader / config separation")
 # The ST MCSDK reprograms JSQR dynamically to exactly one injected rank per ADC.
 need("ADCx_1->JSQR = pHandle->pParams_str->ADCConfig1" in feedback, "ADC1 runtime injected sector selection")
+need("#include \"product.h\"" in feedback, "G30 diagnostics macro included by MCSDK")
+need(feedback.count("LL_TIM_DisableAllOutputs(TIMx);") >= 3, "MOE must be inhibited in motor start paths")
+for fn in ("R3_2_TurnOnLowSides", "R3_2_SwitchOnPWM"):
+    fragment = feedback.split(f"void {fn}( PWMC_Handle_t * pHdl )", 1)[1].split("\n}\n", 1)[0]
+    need("G30_DRV126_DIAG_GATE_OFF" in fragment, f"{fn}: GATE_OFF conditional missing")
+    need(fragment.index("LL_TIM_DisableAllOutputs(TIMx)") < fragment.find("LL_TIM_EnableAllOutputs(") if "LL_TIM_EnableAllOutputs(" in fragment else True, f"{fn}: output inhibit must precede enable")
+    need("pHdl->PWM_off = true;" in fragment, f"{fn}: PWM_off must stay true")
 need("ADCx_2->JSQR = pHandle->pParams_str->ADCConfig2" in feedback, "ADC2 runtime injected sector selection")
 need("&ADC1->JDR1" in mc_params and "&ADC2->JDR1" in mc_params, "current feedback uses rank1")
 
