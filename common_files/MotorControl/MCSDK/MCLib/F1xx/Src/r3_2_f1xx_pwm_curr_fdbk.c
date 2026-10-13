@@ -32,6 +32,9 @@
 
 #include "mc_type.h"
 #include "stdlib.h"
+#ifdef G30P
+#include "product.h"
+#endif
 
 /** @addtogroup MCSDK
   * @{
@@ -447,6 +450,16 @@ __weak void R3_2_TurnOnLowSides( PWMC_Handle_t * pHdl )
   PWMC_R3_2_Handle_t * pHandle = (PWMC_R3_2_Handle_t *) pHdl;
   TIM_TypeDef* TIMx = pHandle->pParams_str->TIMx;
 
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+  /* Diagnostic double inhibit. Do not bootstrap any low-side FET.
+   * The HAL MSP also disconnects the six PWM pins from their AF outputs.
+   */
+  LL_TIM_DisableAllOutputs(TIMx);
+  pHandle->_Super.TurnOnLowSidesAction = false;
+  pHdl->PWM_off = true;
+  return;
+#endif
+
   pHandle->_Super.TurnOnLowSidesAction = true;
 
   /* Clear Update Flag */
@@ -484,6 +497,15 @@ __weak void R3_2_SwitchOnPWM( PWMC_Handle_t * pHdl )
 
   PWMC_R3_2_Handle_t * pHandle = (PWMC_R3_2_Handle_t *) pHdl;
   TIM_TypeDef* TIMx = pHandle->pParams_str->TIMx;
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+  /* No TIM1.MOE even if the user/app requests a motor start.
+   * Do not run switch-on calibration or assert PWM output.
+   */
+  LL_TIM_DisableAllOutputs(TIMx);
+  pHandle->_Super.TurnOnLowSidesAction = false;
+  pHdl->PWM_off = true;
+  return;
+#endif
   pHdl->PWM_off = false;
 
   pHandle->_Super.TurnOnLowSidesAction = false;
