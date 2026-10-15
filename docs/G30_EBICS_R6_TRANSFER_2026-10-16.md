@@ -13,7 +13,7 @@ architectures are interchangeable.
 - PA2 / USART2 uses alternate-function open-drain for the stock yellow-wire link.
 - The inherited ESC-local power-button assumptions are not trusted. No destructive
   action is triggered from the unproven PC14/PA12 inputs.
-- The owner-supplied DRV126 full dump remains the peripheral reference:
+- The owner-supplied DRV126 full dump remains the peripheral reference. The file supplied again on 2026-10-16 was re-hashed locally and is byte-identical to the existing reference:
   `esc126_fulldump.bin`, 131072 bytes,
   SHA-256 `9235b466a2f7449b8184560dbef9012d7c12b099e4076100a223ef68d204bb68`.
 - EBiCS r6 demonstrated that ADC/current-processing timing can fail even when the
