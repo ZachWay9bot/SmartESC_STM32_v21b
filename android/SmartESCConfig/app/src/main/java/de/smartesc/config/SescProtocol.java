@@ -25,6 +25,10 @@ public final class SescProtocol {
     public static final int SAVE = 0x06;
     public static final int DETECT = 0x07;
     public static final int DETECT_STATUS = 0x08;
+    public static final int HW_DIAG = 0x20;
+
+    public static final int CAP_GATE_OFF = 0x01;
+    public static final int CAP_HW_DIAG = 0x02;
 
     private SescProtocol() {}
 
@@ -190,6 +194,24 @@ public final class SescProtocol {
         return t;
     }
 
+    public static HardwareDiag parseHardwareDiag(byte[] p) {
+        if (p == null || p.length < 22) return null;
+        HardwareDiag d = new HardwareDiag();
+        d.version = u8(p[0]);
+        d.capabilities = u8(p[1]);
+        d.adc1Jdr1 = u16(p,2);
+        d.adc2Jdr1 = u16(p,4);
+        d.tim1Cnt = u16(p,6);
+        d.tim1Arr = u16(p,8);
+        d.tim1Cr1 = u16(p,10);
+        d.tim1Bdtr = u16(p,12);
+        d.tim1Ccer = u16(p,14);
+        d.fault = u16(p,16);
+        d.adc1Sr = u16(p,18);
+        d.adc2Sr = u16(p,20);
+        return d;
+    }
+
     public static boolean isStockReadResponse(Frame f, int src, int reg) {
         if (f == null) return false;
         return f.src == src && f.dst == APP_ADDR && f.arg == reg &&
@@ -271,5 +293,14 @@ public final class SescProtocol {
         public float speedKmh, iqA, busVoltageV, inputCurrentA;
         public int soc, fault, detectState, detectProgress, detectError;
         public boolean delta, bmsOnline;
+    }
+
+    public static final class HardwareDiag {
+        public int version, capabilities;
+        public int adc1Jdr1, adc2Jdr1;
+        public int tim1Cnt, tim1Arr, tim1Cr1, tim1Bdtr, tim1Ccer;
+        public int fault, adc1Sr, adc2Sr;
+
+        public boolean gateOff() { return (capabilities & CAP_GATE_OFF) != 0; }
     }
 }
