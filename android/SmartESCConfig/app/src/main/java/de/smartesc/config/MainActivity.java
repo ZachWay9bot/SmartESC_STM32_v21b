@@ -20,10 +20,11 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
     private boolean stockEscDetected;
     private boolean encryptedSession;
     private boolean stockDiagTimedOut;
+    private boolean gateOffBuild;
     private String stockDrv = "--";
     private String stockSerial = "--";
 
-    private TextView status, stockDiag, live, detectStatus;
+    private TextView status, stockDiag, hwDiag, live, detectStatus;
     private Button connect;
     private Button readButton, applyButton, saveButton;
     private Button detectStarButton, detectDeltaButton, rereadButton;
@@ -39,6 +40,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
             if (ble != null && ble.isReady() && deltaEscDetected) {
                 ble.sendConfig(SescProtocol.TELEMETRY,new byte[0]);
                 ble.sendConfig(SescProtocol.DETECT_STATUS,new byte[0]);
+                ble.sendConfig(SescProtocol.HW_DIAG,new byte[0]);
             }
             handler.postDelayed(this,500);
         }
@@ -74,6 +76,10 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
         root.addView(stockDiag);
         Button stockDiagButton = button("STOCK ESC TEST", v -> runStockDiagnostic());
         root.addView(stockDiagButton);
+
+        section(root,"Hardware-Diagnose");
+        hwDiag = text("ADC/TIM1: --",13,false);
+        root.addView(hwDiag);
 
         section(root,"Live");
         live = text("Speed --  |  U --  |  Iq --  |  Batt --",16,true);
@@ -302,6 +308,7 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
             deltaEscDetected = false;
             stockEscDetected = false;
             stockDiagTimedOut = false;
+            gateOffBuild = false;
             stockDrv = "--";
             stockSerial = "--";
 
@@ -359,13 +366,16 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
                 if (f.payload.length >= 5) {
                     int ver=SescProtocol.u8(f.payload[0]);
                     int flags=SescProtocol.u8(f.payload[1]);
+                    int caps=f.payload.length >= 8 ? SescProtocol.u8(f.payload[7]) : 0;
                     boolean firstHello = !deltaEscDetected;
                     deltaEscDetected = true;
+                    gateOffBuild = (caps & SescProtocol.CAP_GATE_OFF) != 0;
                     stockDiagTimedOut = false;
                     status.setText("DeltaESC erkannt · Protocol v"+ver+
-                            " · flags 0x"+Integer.toHexString(flags));
+                            " · flags 0x"+Integer.toHexString(flags)+
+                            (gateOffBuild ? " · GATE OFF" : ""));
                     updateDiagnosticText();
-                    updateDeltaControls(true);
+                    updateDeltaControls(!gateOffBuild);
 
                     if (firstHello) {
                         readAll();
@@ -413,6 +423,22 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
                             " · "+SescProtocol.u8(f.payload[3])+"% · err "+(byte)f.payload[1]);
                 }
                 break;
+            case SescProtocol.HW_DIAG: {
+                SescProtocol.HardwareDiag d=SescProtocol.parseHardwareDiag(f.payload);
+                if(d!=null) {
+                    gateOffBuild = d.gateOff();
+                    updateDeltaControls(!gateOffBuild);
+                    hwDiag.setText(String.format(Locale.US,
+                            "ADC1 JDR1 %d · ADC2 JDR1 %d · fault 0x%04X\n"+
+                            "TIM1 CNT %d / ARR %d · CR1 0x%04X · BDTR 0x%04X · CCER 0x%04X\n"+
+                            "ADC SR: 0x%04X / 0x%04X%s",
+                            d.adc1Jdr1,d.adc2Jdr1,d.fault,
+                            d.tim1Cnt,d.tim1Arr,d.tim1Cr1,d.tim1Bdtr,d.tim1Ccer,
+                            d.adc1Sr,d.adc2Sr,
+                            gateOffBuild ? " · GATE OFF" : ""));
+                }
+                break;
+            }
         }
     }
 
@@ -444,9 +470,11 @@ public class MainActivity extends Activity implements NinebotBleClient.Listener 
             deltaEscDetected = false;
             stockEscDetected = false;
             stockDiagTimedOut = false;
+            gateOffBuild = false;
             stockDrv = "--";
             stockSerial = "--";
             if (stockDiag != null) stockDiag.setText("BLE: -- · ESC bridge: --");
+            if (hwDiag != null) hwDiag.setText("ADC/TIM1: --");
             updateDeltaControls(false);
             connect.setText("G30 suchen & verbinden");
         });
