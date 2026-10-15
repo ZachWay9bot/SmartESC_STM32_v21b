@@ -267,7 +267,10 @@ static void shu_handoff_to_stock_iap(void) {
  *       0x08 DETECT_STATUS
  */
 #define SESC_CFG_CMD                 0x7Du
-#define SESC_CFG_PROTOCOL_VERSION    1u
+#define SESC_CFG_PROTOCOL_VERSION    2u
+
+#define SESC_CAP_GATE_OFF            0x01u
+#define SESC_CAP_HW_DIAG             0x02u
 
 enum {
 	SESC_CFG_HELLO = 0x00,
@@ -278,7 +281,8 @@ enum {
 	SESC_CFG_SET_PROFILE = 0x05,
 	SESC_CFG_SAVE = 0x06,
 	SESC_CFG_DETECT = 0x07,
-	SESC_CFG_DETECT_STATUS = 0x08
+	SESC_CFG_DETECT_STATUS = 0x08,
+	SESC_CFG_HW_DIAG = 0x20
 };
 
 enum {
@@ -602,7 +606,11 @@ static void sesc_cfg_handle_packet(port_str *port) {
 	memset(out, 0, sizeof(out));
 
 	switch(arg) {
-	case SESC_CFG_HELLO:
+	case SESC_CFG_HELLO: {
+		uint8_t caps = SESC_CAP_HW_DIAG;
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+		caps |= SESC_CAP_GATE_OFF;
+#endif
 		out[0] = SESC_CFG_PROTOCOL_VERSION;
 		out[1] = cfg->flags;
 		out[2] = task_delta_is_active() ? 1u : 0u;
@@ -610,8 +618,10 @@ static void sesc_cfg_handle_packet(port_str *port) {
 		out[4] = (uint8_t)sesc_detect_error;
 		out[5] = (uint8_t)(PRODUCT_FIRMWARE_VERSION & 0xFFu);
 		out[6] = (uint8_t)(PRODUCT_FIRMWARE_VERSION >> 8);
-		sesc_cfg_reply(port, src, arg, out, 7u);
+		out[7] = caps;
+		sesc_cfg_reply(port, src, arg, out, 8u);
 		break;
+	}
 
 	case SESC_CFG_TELEMETRY: {
 		const float speed = VescToSTM_get_speed() * 3.6f;
@@ -723,6 +733,46 @@ static void sesc_cfg_handle_packet(port_str *port) {
 		out[2] = sesc_detect_target_delta;
 		out[3] = sesc_detect_progress;
 		sesc_cfg_reply(port, src, arg, out, 4u);
+		break;
+
+	case SESC_CFG_HW_DIAG:
+		/*
+		 * Read-only bring-up snapshot. This intentionally mirrors the EBiCS
+		 * debugging approach: expose the live ADC/TIM1 state through the
+		 * already proven BLE/dashboard transport without touching the power
+		 * stage or changing any peripheral configuration.
+		 *
+		 * payload v1:
+		 *  0       diag format version
+		 *  1       capability flags
+		 *  2..3    ADC1 JDR1
+		 *  4..5    ADC2 JDR1
+		 *  6..7    TIM1 CNT
+		 *  8..9    TIM1 ARR
+		 * 10..11   TIM1 CR1
+		 * 12..13   TIM1 BDTR
+		 * 14..15   TIM1 CCER
+		 * 16..17   MCSDK fault bits
+		 * 18..19   ADC1 SR
+		 * 20..21   ADC2 SR
+		 * 22..23   reserved
+		 */
+		out[0] = 1u;
+		out[1] = SESC_CAP_HW_DIAG;
+#if defined(G30P) && G30_DRV126_DIAG_GATE_OFF
+		out[1] |= SESC_CAP_GATE_OFF;
+#endif
+		sesc_put_u16(&out[2], (uint16_t)ADC1->JDR1);
+		sesc_put_u16(&out[4], (uint16_t)ADC2->JDR1);
+		sesc_put_u16(&out[6], (uint16_t)TIM1->CNT);
+		sesc_put_u16(&out[8], (uint16_t)TIM1->ARR);
+		sesc_put_u16(&out[10], (uint16_t)TIM1->CR1);
+		sesc_put_u16(&out[12], (uint16_t)TIM1->BDTR);
+		sesc_put_u16(&out[14], (uint16_t)TIM1->CCER);
+		sesc_put_u16(&out[16], pMCI[M1]->pSTM->hFaultOccurred);
+		sesc_put_u16(&out[18], (uint16_t)ADC1->SR);
+		sesc_put_u16(&out[20], (uint16_t)ADC2->SR);
+		sesc_cfg_reply(port, src, arg, out, 24u);
 		break;
 
 	default:
