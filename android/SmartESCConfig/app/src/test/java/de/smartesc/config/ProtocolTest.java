@@ -66,4 +66,22 @@ public class ProtocolTest {
         assertEquals("DRV 1.6.13 (0x0613)",
                 SescProtocol.formatG30DrvVersion(hex("1306")));
     }
+
+    @Test public void hardwareDiagV1ParsesGateOffAndRegisters() {
+        byte[] p=hex("010134127856cdab40002000c00000001100220033000000");
+        SescProtocol.HardwareDiag d=SescProtocol.parseHardwareDiag(p);
+        assertNotNull(d);
+        assertEquals(1,d.version);
+        assertTrue(d.gateOff());
+        assertEquals(0x1234,d.adc1Jdr1);
+        assertEquals(0x5678,d.adc2Jdr1);
+        assertEquals(0xABCD,d.tim1Cnt);
+        assertEquals(0x0040,d.tim1Arr);
+        assertEquals(0x0020,d.tim1Cr1);
+        assertEquals(0x00C0,d.tim1Bdtr);
+        assertEquals(0,d.tim1Ccer);
+        assertEquals(0x0011,d.fault);
+        assertEquals(0x0022,d.adc1Sr);
+        assertEquals(0x0033,d.adc2Sr);
+    }
 }
