@@ -4,6 +4,7 @@ on:
     branches:
       - experiment/g30-drv126-tim1-profile-2026-10-13
       - integration/g30-drv126-evidence-v2-2026-10-14
+      - integration/g30-ebics-r6-diagnostics-2026-10-16
   workflow_dispatch:
 
 jobs:
