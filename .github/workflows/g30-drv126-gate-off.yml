@@ -5,6 +5,7 @@ on:
       - experiment/g30-drv126-tim1-profile-2026-10-13
       - integration/g30-drv126-evidence-v2-2026-10-14
       - integration/g30-ebics-r6-diagnostics-2026-10-16
+      - integration/g30-xbot316-handover-2026-10-17
   workflow_dispatch:
 
 jobs:
@@ -16,6 +17,11 @@ jobs:
         run: |
           python3 tools/test_drv126_tim1_profile.py
           python3 tools/test_shu_preflight.py
+
+      - name: Host-test XBOT-derived sensorless handover policy
+        run: |
+          gcc -std=c11 -Wall -Wextra -Werror             -Icommon_files/src             common_files/src/g30_sensorless_handover.c             tools/test_g30_sensorless_handover.c             -o /tmp/test_g30_sensorless_handover
+          /tmp/test_g30_sensorless_handover
       - name: Build G30 with STM32CubeIDE
         uses: docker://wsbu/stm32cubeide:latest
         with:
