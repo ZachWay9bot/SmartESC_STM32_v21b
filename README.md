@@ -12,6 +12,9 @@
 
 **DeltaESC is a G30D-focused motor-controller firmware based heavily on SmartESC by Koxx3.**
 
+> [!IMPORTANT]
+> **Current branch status:** XBOT sensorless v0.3.16 handover logic is being transferred only as a host-tested, hardware-independent scaffold. The G30 power stage remains **GATE_OFF** and this branch cannot intentionally drive the motor. See [docs/G30_XBOT316_TRANSFER_2026-10-17.md](docs/G30_XBOT316_TRANSFER_2026-10-17.md).
+
 Upstream project: [Koxx3/SmartESC_STM32_v2](https://github.com/Koxx3/SmartESC_STM32_v2)
 
 DeltaESC keeps the SmartESC motor-control foundation while focusing this fork on the Ninebot G30D: reversible SHU flashing, stock IAP preservation, true coast/no-regen, stock G30 BMS support, automatic STAR/DELTA switching and a dedicated Android configuration app.
