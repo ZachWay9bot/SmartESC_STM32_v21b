@@ -13,7 +13,7 @@
 **DeltaESC is a G30D-focused motor-controller firmware based heavily on SmartESC by Koxx3.**
 
 > [!IMPORTANT]
-> **Current branch status:** XBOT sensorless v0.3.16 handover logic is being transferred only as a host-tested, hardware-independent scaffold. The G30 power stage remains **GATE_OFF** and this branch cannot intentionally drive the motor. See [docs/G30_XBOT316_TRANSFER_2026-10-17.md](docs/G30_XBOT316_TRANSFER_2026-10-17.md).
+> **Current branch status:** the owner has confirmed that the XBOT v0.3.16 test controller uses the same G30 Gen1 **3-cap hardware side**. The proven XBOT sensorless hardware path is now the primary reference for the 3-cap DeltaESC integration. The DeltaESC power stage nevertheless remains **GATE_OFF** until the XBOT PWM/BEMF/current mappings are reconciled with the MCSDK loop and diagnostics. See [docs/G30_XBOT316_TRANSFER_2026-10-17.md](docs/G30_XBOT316_TRANSFER_2026-10-17.md).
 
 Upstream project: [Koxx3/SmartESC_STM32_v2](https://github.com/Koxx3/SmartESC_STM32_v2)
 
