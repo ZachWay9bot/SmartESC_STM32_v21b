@@ -12,8 +12,10 @@
  * connected to the G30 MCSDK current loop.
  *
  * Origin: distilled from the real-hardware validated XBOT sensorless v0.3.16
- * startup path. XBOT-specific BEMF ADC pins, current polarity, PWM mapping and
- * raw sector direction are intentionally NOT copied into the G30 target.
+ * startup path. The owner has since confirmed that the XBOT test controller
+ * uses the same G30 Gen1 3-cap hardware side. Hardware mappings are therefore
+ * eligible for direct transfer on the integration branch, while this module
+ * itself deliberately remains hardware-agnostic and has no gate/PWM side effects.
  */
 
 typedef enum {
