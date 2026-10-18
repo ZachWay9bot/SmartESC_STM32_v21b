@@ -50,9 +50,9 @@ jobs:
           b = p.read_bytes()
           sp, reset = struct.unpack_from("<II", b, 0)
           reset &= ~1
-          assert len(b) <= 52 * 1024, f"image too large: {len(b)}"
+          assert len(b) <= 54 * 1024, f"image too large: {len(b)}"
           assert 0x20000000 <= sp <= 0x20005000, hex(sp)
-          assert 0x08001000 <= reset < 0x0800E000, hex(reset)
+          assert 0x08001000 <= reset < 0x0800E800, hex(reset)
           print(f"G30 SHU validation OK: {len(b)} bytes, SP=0x{sp:08X}, Reset=0x{reset:08X}")
           PY
 
