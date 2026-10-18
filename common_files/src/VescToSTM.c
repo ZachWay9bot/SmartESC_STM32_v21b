@@ -134,7 +134,7 @@ int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 	if(fp.minimum_current>0 && pMCI[M1]->pSTM->hFaultOccurred == 0){
 		if(pwm_force == false && abs(iq) <= fp.minimum_current && abs(FW_M1.AvVolt_qd.q) < MIN_DUTY_PWM){
 			int32_t erpm = VescToSTM_get_erpm_fast()*2;
-			float rad_s = erpm * ((2.0 * M_PI) / 60.0);
+			float rad_s = erpm * (6.28318530718f / 60.0f);
 			motor_voltage = rad_s * mc_conf.foc_motor_flux_linkage;
 			if(VescToSTM_overspeed()==false){
 				VescToSTM_pwm_stop();
@@ -632,7 +632,7 @@ void VescToSTM_start_motor(){
 
 
 void VescToSTM_init_odometer(mc_configuration* conf){
-	tacho_scale = (conf->si_wheel_diameter * M_PI) / (3.0 * conf->si_motor_poles * conf->si_gear_ratio);
+	tacho_scale = (conf->si_wheel_diameter * 3.14159265359f) / (3.0f * conf->si_motor_poles * conf->si_gear_ratio);
 }
 
 /**
@@ -683,7 +683,7 @@ uint32_t VescToSTM_get_odometer(void) {
  * Speed, in m/s
  */
 float VescToSTM_get_speed(void) {
-	float temp = (((float)MCI_GetAvrgMecSpeedUnit(pMCI[M1]) / 10.0) * mc_conf.si_wheel_diameter * M_PI) / mc_conf.si_gear_ratio / mc_conf.si_motor_poles;
+	float temp = (((float)MCI_GetAvrgMecSpeedUnit(pMCI[M1]) / 10.0f) * mc_conf.si_wheel_diameter * 3.14159265359f) / mc_conf.si_gear_ratio / mc_conf.si_motor_poles;
 	return temp * DIR_MUL;
 }
 
