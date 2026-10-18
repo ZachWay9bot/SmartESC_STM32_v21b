@@ -36,7 +36,9 @@
 
 NinebotPack frame;
 
-m365Answer m365_to_display = {.start1=NinebotHeader0, .start2=NinebotHeader1, .len=8, .addr=0x21, .cmd=0x64, .arg=0, .mode=M365_MODE_SPORT};
+m365Answer m365_to_display = {.start1=NinebotHeader0, .start2=NinebotHeader1, .len=6,
+		.src=NINEBOT_ESC_ADDR, .dst=NINEBOT_DASH_ADDR, .cmd=0x64, .arg=0,
+		.mode=M365_MODE_SPORT};
 
 uint8_t app_connection_timout = 8;
 
@@ -300,49 +302,38 @@ void task_app(void * argument)
 	xTimerStart(xTimer, 100);
 
 
-	uint16_t slow_update_cnt=0;
   /* Infinite loop */
 	for(;;)
 	{
 		while(rd_ptr != uart_get_write_pos(port)) {
-			if(ninebot_parse(usart_rx_dma_buffer[rd_ptr] ,&frame)	==0){
-				//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
-				switch(frame.cmd){
-					case 0x64:
-						addCRC((uint8_t*)&m365_to_display, m365_to_display.len+6);
-						my_uart_send_data((uint8_t*)&m365_to_display, sizeof(m365_to_display), port);
-					break;
-					case 0x65:
-						adc1 = frame.payload[1];
-						adc2 = frame.payload[2];
-						VescToSTM_timeout_reset();
-						app_check_timer();
-						//commands_printf(main_uart.phandle, "LEN: %d CMD: %x ARG: %x PAY: %02x %02x %02x %02x", frame.len, frame.cmd, frame.arg, frame.payload[0], frame.payload[1], frame.payload[2], frame.payload[3]);
-					break;
+			if(ninebot_parse(usart_rx_dma_buffer[rd_ptr], &frame) == 0 &&
+			   frame.src == NINEBOT_DASH_ADDR && frame.dst == NINEBOT_ESC_ADDR) {
+				/* G30 lever/heartbeat frames all carry throttle/brake here. */
+				if((frame.cmd == 0x61 || frame.cmd == 0x64 || frame.cmd == 0x65) &&
+				   frame.len >= 3) {
+					adc1 = frame.payload[1];
+					adc2 = frame.payload[2];
+					VescToSTM_timeout_reset();
+					app_check_timer();
+				}
+
+				/* Stock G30 answers the dashboard heartbeat (CMD64) with CMD64 only. */
+				if(frame.cmd == 0x64) {
+					int spd = (int)(fabsf(VescToSTM_get_speed()) * 3.6f + 0.5f);
+					int bat = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
+					if(spd > 255) spd = 255;
+					if(bat < 0) bat = 0; else if(bat > 100) bat = 100;
+					m365_to_display.speed = (uint8_t)spd;
+					m365_to_display.battery = (uint8_t)bat;
+					m365_to_display.beep = 0;
+					m365_to_display.faultcode = (uint8_t)pMCI[M1]->pSTM->hFaultOccurred;
+					addCRC((uint8_t*)&m365_to_display, sizeof(m365_to_display));
+					my_uart_send_data((uint8_t*)&m365_to_display, sizeof(m365_to_display), port);
 				}
 			}
 			rd_ptr++;
 			rd_ptr &= ((uint32_t)port->rx_buffer_size - 1);
 		}
-
-		if(slow_update_cnt==0){
-			if(m365_to_display.mode & 0x40){
-				m365_to_display.speed = VescToSTM_get_speed()*2.2369;
-			}else{
-				m365_to_display.speed = VescToSTM_get_speed()*3.6;
-
-			}
-			m365_to_display.speed *= DIR_MUL;
-			int temp = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
-			m365_to_display.battery = temp>100?100:temp;
-			m365_to_display.beep=0;
-			m365_to_display.faultcode=pMCI[M1]->pSTM->hFaultOccurred;
-
-		}else{
-			slow_update_cnt++;
-			if(slow_update_cnt==50) slow_update_cnt=0;
-		}
-
 
 		vTaskDelay(10);
 		if(ulTaskNotifyTake(pdTRUE, 10)){

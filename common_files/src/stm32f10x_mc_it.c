@@ -134,6 +134,7 @@ void TIMx_BRK_M1_IRQHandler(void)
   */
 void SPD_TIM_M1_IRQHandler(void)
 {
+#ifndef G30P
   /* USER CODE BEGIN SPD_TIM_M1_IRQn 0 */
 
   /* USER CODE END SPD_TIM_M1_IRQn 0 */
@@ -167,6 +168,10 @@ void SPD_TIM_M1_IRQHandler(void)
   /* USER CODE BEGIN SPD_TIM_M1_IRQn 1 */
 
   /* USER CODE END SPD_TIM_M1_IRQn 1 */
+#else
+  /* Hall timer is unused by the G30 sensorless build. */
+  if (TIM3->SR != 0u) TIM3->SR = 0u;
+#endif
 }
 
 

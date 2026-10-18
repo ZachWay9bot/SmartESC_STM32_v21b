@@ -29,6 +29,7 @@
 #include "motorcontrol.h"
 #include "conf_general.h"
 #include "app.h"
+#include "g30_recovery_iap.h"
 
 /* USER CODE END Includes */
 
@@ -77,7 +78,7 @@ static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM1_Init(void);
-static void MX_TIM3_Init(void);
+static void MX_TIM3_Init(void) __attribute__((unused));
 static void MX_USART3_UART_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
@@ -120,11 +121,12 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  G30Recovery_CheckAndRun();
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_TIM1_Init();
-  MX_TIM3_Init();
+  /* TIM3 is Hall-only on G30P; sensorless build leaves it unused. */
   MX_USART3_UART_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();

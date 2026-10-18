@@ -93,8 +93,10 @@ void task_cli(void * argument)
 			rd_ptr &= ((uint32_t)port->rx_buffer_size - 1);
 		}
 
+#ifndef G30P
 		send_sample(port->phandle);
 		send_position(port->phandle);
+#endif
 		VescToSTM_handle_timeout();
 
 		if(appconf.app_to_use == APP_ADC_UART){

@@ -42,6 +42,9 @@
 #include "music.h"
 #include "current_sense.h"
 #include "VescToSTM.h"
+#ifdef G30P
+#include "g30_sensorless.h"
+#endif
 
 /* USER CODE BEGIN Includes */
 
@@ -173,12 +176,20 @@ __weak void MCboot( MCI_Handle_t* pMCIList[NBR_OF_MOTORS],MCT_Handle_t* pMCTList
   /*   Main speed sensor component initialization       */
   /******************************************************/
   pSTC[M1] = &SpeednTorqCtrlM1;
+#ifdef G30P
+  G30SL_Init(&G30Sensorless_M1, &HALL_M1._Super);
+#else
   HALL_Init (&HALL_M1);
+#endif
 
   /******************************************************/
   /*   Speed & torque component initialization          */
   /******************************************************/
+#ifdef G30P
+  STC_Init(pSTC[M1],pPIDSpeed[M1], &G30Sensorless_M1._Super);
+#else
   STC_Init(pSTC[M1],pPIDSpeed[M1], &HALL_M1._Super);
+#endif
 
   /********************************************************/
   /*   PID component initialization: current regulation   */
@@ -240,7 +251,11 @@ __weak void MCboot( MCI_Handle_t* pMCIList[NBR_OF_MOTORS],MCT_Handle_t* pMCTList
   MCT[M1].pPIDFluxWeakening = &PIDFluxWeakeningHandle_M1; /* only if M1 has FW */
   MCT[M1].pPWMnCurrFdbk = pwmcHandle[M1];
   MCT[M1].pRevupCtrl = MC_NULL;              /* only if M1 is not sensorless*/
+#ifdef G30P
+  MCT[M1].pSpeedSensorMain = (SpeednPosFdbk_Handle_t *) &G30Sensorless_M1;
+#else
   MCT[M1].pSpeedSensorMain = (SpeednPosFdbk_Handle_t *) &HALL_M1;
+#endif
   MCT[M1].pSpeedSensorAux = MC_NULL;
   MCT[M1].pSpeedSensorVirtual = MC_NULL;
   MCT[M1].pSpeednTorqueCtrl = pSTC[M1];
@@ -357,7 +372,14 @@ __weak void TSK_MediumFrequencyTaskM1(void)
   State_t StateM1;
   int16_t wAux = 0;
 
+#ifdef G30P
+  if (PWM_Handle_M1._Super.PWM_off) {
+    G30SL_PassivePoll(&G30Sensorless_M1);
+  }
+  bool IsSpeedReliable = G30SL_CalcAvrgMecSpeedUnit(&G30Sensorless_M1, &wAux);
+#else
   bool IsSpeedReliable = HALL_CalcAvrgMecSpeedUnit( &HALL_M1, &wAux );
+#endif
   PQD_CalcElMotorPower( pMPM[M1] );
 
   StateM1 = STM_GetState( &STM[M1] );
@@ -391,13 +413,18 @@ __weak void TSK_MediumFrequencyTaskM1(void)
     break;
 
   case CLEAR:
+#ifdef G30P
+    G30SL_Clear(&G30Sensorless_M1);
+#else
     HALL_Clear( &HALL_M1 );
+#endif
 
     if ( STM_NextState( &STM[M1], START ) == true )
     {
       FOC_Clear( M1 );
-
+#ifndef G30P
       R3_2_SwitchOnPWM( pwmcHandle[M1] );
+#endif
     }
     break;
 
@@ -441,6 +468,9 @@ __weak void TSK_MediumFrequencyTaskM1(void)
 
   case ANY_STOP:
     R3_2_SwitchOffPWM( pwmcHandle[M1] );
+#ifdef G30P
+    G30SL_OnPwmStop(&G30Sensorless_M1);
+#endif
     FOC_Clear( M1 );
     MPM_Clear( (MotorPowMeas_Handle_t*) pMPM[M1] );
     TSK_SetStopPermanencyTimeM1( STOPPERMANENCY_TICKS );
@@ -678,7 +708,11 @@ __weak uint8_t TSK_HighFrequencyTask(void)
 	uint8_t bMotorNbr = 0;
 	uint16_t hFOCreturn;
 
+#ifdef G30P
+	G30SL_CalcElAngle(&G30Sensorless_M1);
+#else
 	HALL_CalcElAngle (&HALL_M1);
+#endif
 
 	/* USER CODE BEGIN HighFrequencyTask SINGLEDRIVE_1 */
 
@@ -804,6 +838,13 @@ inline uint16_t FOC_CurrControllerM1(void)
   FOCVars[M1].Valphabeta = Valphabeta;
   FOCVars[M1].hElAngle = hElAngle;
   FW_DataProcess(pFW[M1], Vqd, Iqd);
+#ifdef G30P
+  {
+    uint32_t vbus_mv = (uint32_t)(((uint32_t)VBS_GetAvBusVoltage_d(pMCT[M1]->pBusVoltageSensor) * 1000u) /
+                                  (uint32_t)BATTERY_VOLTAGE_GAIN);
+    G30SL_ObserverStep(&G30Sensorless_M1, Ialphabeta, Valphabeta, vbus_mv);
+  }
+#endif
   return(hCodeError);
 }
 

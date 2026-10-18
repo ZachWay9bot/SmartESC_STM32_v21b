@@ -38,6 +38,9 @@
 #include "mcconf_default.h"
 #include <string.h>
 #include "main.h"
+#ifdef G30P
+#include "g30_sensorless.h"
+#endif
 
 mc_configuration mc_conf;
 app_configuration appconf;
@@ -299,7 +302,12 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 	PWM_Handle_M1._Super.hT_Sqrt3 	 = (pwm_p_cycles*SQRT3FACTOR)/16384u;
 	PWM_Handle_M1._Super.PWMperiod   = pwm_p_cycles;
 	PWM_Handle_M1.Half_PWMPeriod = pwm_p_cycles/2;
+#ifdef G30P
+	G30Sensorless_M1._Super.hMeasurementFrequency = (uint16_t)((uint32_t)f_sw /
+			(regulation_exec_rate * PWM_FREQ_SCALING));
+#else
 	HALL_M1._Super.hMeasurementFrequency = (uint16_t) ((uint32_t)(f_sw)/(regulation_exec_rate*PWM_FREQ_SCALING));
+#endif
 	RampExtMngrHFParamsM1.FrequencyHz = (uint32_t) ((uint32_t)(f_sw)/(regulation_exec_rate));
 	R3_2_ParamsM1.RepetitionCounter = (uint16_t) ((regulation_exec_rate *2u)-1u);
 	htim1.Init.Period = ((pwm_p_cycles) / 2);
@@ -338,6 +346,11 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 void conf_general_setup_mc(mc_configuration *mcconf) {
 
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
+#ifdef G30P
+	G30SL_Configure(&G30Sensorless_M1, mcconf->foc_motor_r, mcconf->foc_motor_l,
+				  mcconf->foc_motor_flux_linkage, mcconf->si_wheel_diameter,
+				  mcconf->si_gear_ratio, mcconf->si_motor_poles, (uint32_t)mcconf->foc_f_sw);
+#endif
 
 	float current_max = mcconf->l_current_max * CURRENT_FACTOR_A * mcconf->l_current_max_scale;
 	float current_min = mcconf->l_current_min * CURRENT_FACTOR_A * mcconf->l_current_min_scale;
@@ -413,6 +426,11 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 	SpeednTorqCtrlM1.MaxPositiveTorque			= current_max;
 	SpeednTorqCtrlM1.MinNegativeTorque 			= current_min;
 
+#ifdef G30P
+	G30Sensorless_M1._Super.hMaxReliableMecSpeedUnit = max_app_speed;
+	G30Sensorless_M1._Super.hMinReliableMecSpeedUnit = G30Sensorless_M1.core.cfg.min_speed_unit;
+	G30Sensorless_M1._Super.bMaximumSpeedErrorsNumber = MEAS_ERRORS_BEFORE_FAULTS;
+#else
 	HALL_M1._Super.hMaxReliableMecSpeedUnit     = max_app_speed;
 	HALL_M1._Super.hMinReliableMecSpeedUnit     = VescToSTM_erpm_to_speed(mcconf->foc_hall_interp_erpm);
 	HALL_M1._Super.bMaximumSpeedErrorsNumber    = MEAS_ERRORS_BEFORE_FAULTS;
@@ -421,6 +439,7 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 		HALL_M1.lut[i] = mcconf->foc_hall_table[i];
 	}
 	HALL_M1.SwitchSpeed = VescToSTM_erpm_to_speed(mcconf->foc_hall_interp_erpm);
+#endif
 
 	VescToSTM_set_temp_cut(mcconf->l_temp_fet_start, mcconf->l_temp_fet_end);
 
@@ -438,11 +457,15 @@ void conf_general_setup_mc(mc_configuration *mcconf) {
 
 	// BLDC switching and drive
 	mcconf->motor_type = MOTOR_TYPE_FOC;
-	mcconf->sensor_mode = SENSOR_MODE_SENSORED;
 	mcconf->pwm_mode = PWM_MODE_SYNCHRONOUS;
+#ifdef G30P
+	mcconf->sensor_mode = SENSOR_MODE_SENSORLESS;
+	mcconf->foc_sensor_mode = FOC_SENSOR_MODE_SENSORLESS;
+#else
+	mcconf->sensor_mode = SENSOR_MODE_SENSORED;
 	mcconf->foc_sensor_mode = FOC_SENSOR_MODE_HALL;
-
 	HALL_Init(&HALL_M1);
+#endif
 
 	VescToSTM_init_odometer(mcconf);
 	mc_conf = *mcconf;

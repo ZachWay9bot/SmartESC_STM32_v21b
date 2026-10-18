@@ -5,6 +5,11 @@
 #include "mc_config.h"
 
 void get_mosfet_on_time(int32_t on_time[6]) {
+	/* Disabled estimator: explicitly return zero on-time for all six devices. */
+	for (uint8_t i = 0; i < 6; i++) {
+		on_time[i] = 0;
+	}
+
 	/*uint16_t min_duty_cycle, max_duty_cycle;
 	uint8_t i, min_duty_cycle_phase, max_duty_cycle_phase, mid_duty_cycle_phase;
 	uint16_t duty_cylce[3];

@@ -24,68 +24,54 @@
 #include "m365_register_map.h"
 
 enum{
-	NIN_IDLE, NIN_HEAD, NIN_LEN, NIN_ADDR, NIN_CMD, NIN_ARG, NIN_DATA, NIN_CRC
+	NIN_IDLE, NIN_HEAD, NIN_LEN, NIN_SRC, NIN_DST, NIN_CMD, NIN_ARG,
+	NIN_DATA, NIN_CRC0, NIN_CRC1
 };
 
-
-uint16_t ninebot_parse(uint8_t data , NinebotPack *message){
+uint16_t ninebot_parse(uint8_t data, NinebotPack *message){
 	static uint8_t state = NIN_IDLE;
 	static uint8_t cnt = 0;
-	static uint16_t checksum=0;
-	switch (state){
+	static uint16_t checksum = 0;
+
+	switch(state){
 	case NIN_IDLE:
-		if(data==NinebotHeader0) state = NIN_HEAD;
+		if(data == NinebotHeader0) state = NIN_HEAD;
 		break;
 	case NIN_HEAD:
-		if(data==NinebotHeader1) state = NIN_LEN;
+		state = (data == NinebotHeader1) ? NIN_LEN :
+		        ((data == NinebotHeader0) ? NIN_HEAD : NIN_IDLE);
 		break;
 	case NIN_LEN:
-		message->len = data-1;
-		checksum=0;
-		checksum=checksum + data;
-		state = NIN_ADDR;
+		if(data > NinebotMaxPayload){ state = NIN_IDLE; break; }
+		message->len = data; checksum = data; cnt = 0; state = NIN_SRC;
 		break;
-	case NIN_ADDR:
-		cnt++;
-		state = NIN_CMD;
-		checksum=checksum + data;
-		message->addr = data;
-		break;
+	case NIN_SRC:
+		message->src = data; checksum += data; state = NIN_DST; break;
+	case NIN_DST:
+		message->dst = data; checksum += data; state = NIN_CMD; break;
 	case NIN_CMD:
-		cnt=0;
-		state = NIN_ARG;
-		checksum=checksum + data;
-		message->cmd = data;
-		break;
+		message->cmd = data; checksum += data; state = NIN_ARG; break;
 	case NIN_ARG:
-		cnt++;
-		state = NIN_DATA;
-		checksum=checksum + data;
-		message->arg = data;
+		message->arg = data; checksum += data;
+		state = message->len ? NIN_DATA : NIN_CRC0;
 		break;
 	case NIN_DATA:
-		cnt++;
-		checksum=checksum + data;
-		if((cnt-2) < NinebotMaxPayload){
-			message->payload[cnt-2] = data;
-		}
-		if(cnt == (message->len)){
-			state = NIN_CRC;
-			cnt=0;
-		}
+		message->payload[cnt++] = data; checksum += data;
+		if(cnt >= message->len) state = NIN_CRC0;
 		break;
-	case NIN_CRC:
-		message->CheckSum[cnt] = data;
-		if(cnt==1){
-			checksum ^= 0xFFFF;
-			state = NIN_IDLE;
-			return checksum - ((message->CheckSum[1]<<8) + message->CheckSum[0]);
-		}
-		cnt++;
-		break;
+	case NIN_CRC0:
+		message->CheckSum[0] = data; state = NIN_CRC1; break;
+	case NIN_CRC1: {
+		message->CheckSum[1] = data;
+		uint16_t got = (uint16_t)message->CheckSum[0] | ((uint16_t)data << 8);
+		uint16_t want = (uint16_t)~checksum;
+		state = NIN_IDLE;
+		return got == want ? 0 : 1;
 	}
-
-return 1;
+	default:
+		state = NIN_IDLE; break;
+	}
+	return 1;
 }
 
 void addCRC(uint8_t * message, uint8_t size){
