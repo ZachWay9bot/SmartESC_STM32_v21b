@@ -656,5 +656,15 @@
 			<type>1</type>
 			<locationURI>PARENT-2-PROJECT_LOC/common_files/src/g30_sensorless.h</locationURI>
 		</link>
+		<link>
+			<name>Application/User/G30Recovery/g30_recovery_iap.c</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/common_files/src/g30_recovery_iap.c</locationURI>
+		</link>
+		<link>
+			<name>Application/User/G30Recovery/g30_recovery_iap.h</name>
+			<type>1</type>
+			<locationURI>PARENT-2-PROJECT_LOC/common_files/src/g30_recovery_iap.h</locationURI>
+		</link>
 	</linkedResources>
 </projectDescription>
