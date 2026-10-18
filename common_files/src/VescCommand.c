@@ -467,14 +467,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         reply_func(send_buffer, ind, phandle);
     } break;
 
-    case COMM_PING_CAN: {
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(8)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_PING_CAN;
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
     case COMM_ALIVE:
         VescToSTM_timeout_reset();
         break;
