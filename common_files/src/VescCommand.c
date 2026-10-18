@@ -361,39 +361,18 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         vPortFree(mcconf);
     } break;
 
-    case COMM_GET_MCCONF:
-    case COMM_GET_MCCONF_DEFAULT: {
+    case COMM_GET_MCCONF: {
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
-        if (packet_id == COMM_GET_MCCONF) *mcconf = *mc_interface_get_configuration();
-        else confgenerator_set_defaults_mcconf(mcconf);
+        *mcconf = *mc_interface_get_configuration();
         commands_send_mcconf(packet_id, mcconf, phandle);
         vPortFree(mcconf);
     } break;
 
-    case COMM_SET_APPCONF: {
-        app_configuration *cfg = app_get_configuration();
-        if (confgenerator_deserialize_appconf(data, cfg)) {
-            conf_general_store_app_configuration(cfg);
-            app_set_configuration(cfg);
-            int32_t ind = 0;
-            uint8_t send_buffer[PACKET_SIZE(8)];
-            uint8_t *buffer = send_buffer + PACKET_HEADER;
-            buffer[ind++] = packet_id;
-            reply_func(send_buffer, ind, phandle);
-        }
-    } break;
-
-    case COMM_GET_APPCONF:
-    case COMM_GET_APPCONF_DEFAULT: {
-        app_configuration *cfg = pvPortMalloc(sizeof(app_configuration));
-        if (!cfg) break;
-        if (packet_id == COMM_GET_APPCONF) *cfg = *app_get_configuration();
-        else confgenerator_set_defaults_appconf(cfg);
-        commands_send_appconf(packet_id, cfg, phandle);
-        vPortFree(cfg);
-    } break;
-
+    /*
+     * G30 DETECT profile intentionally omits APPCONF and MCCONF_DEFAULT.
+     * Live motor config, telemetry and control remain available.
+     */
     case COMM_GET_DECODED_ADC: {
         int32_t ind = 0;
         uint8_t send_buffer[PACKET_SIZE(24)];
