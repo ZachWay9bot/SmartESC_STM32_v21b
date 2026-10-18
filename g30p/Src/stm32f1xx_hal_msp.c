@@ -122,9 +122,15 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
     PA5     ------> ADC1_IN5
     */
     GPIO_InitStruct.Pin = MAIN_CURR_AMPL_Pin|M1_BUS_VOLTAGE_Pin|M1_CURR_AMPL_U_Pin|M1_CURR_AMPL_V_Pin
-                          |M1_CURR_AMPL_W_Pin;
+                          |M1_CURR_AMPL_W_Pin|GPIO_PIN_6|GPIO_PIN_7;
     GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+    /* G30 phase-voltage/BEMF inputs: PA6=A, PA7=B, PB1=C. */
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitStruct.Pin = GPIO_PIN_1;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
     /* ADC1 DMA Init */
     /* ADC1 Init */
