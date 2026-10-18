@@ -17,6 +17,9 @@
 #include "app.h"
 #include "ninebot.h"
 #include "VescCommand.h"
+#ifdef G30P
+#include "g30_sensorless.h"
+#endif
 
 static float tacho_scale;
 stm_state VescToSTM_mode;
@@ -172,7 +175,9 @@ int32_t VescToSTM_erpm_to_speed(int32_t erpm){
 
 static int16_t erpm_to_int16(int32_t erpm){
 	int32_t speed = VescToSTM_erpm_to_speed(erpm);
-	int32_t out = ((int32_t)HALL_M1._Super.DPPConvFactor * speed) / ((int32_t) SPEED_UNIT * (int32_t)HALL_M1._Super.hMeasurementFrequency);
+	SpeednPosFdbk_Handle_t *spd = SpeednTorqCtrlM1.SPD;
+	int32_t out = ((int32_t)spd->DPPConvFactor * speed) /
+				  ((int32_t)SPEED_UNIT * (int32_t)spd->hMeasurementFrequency);
 	return out;
 }
 
@@ -312,6 +317,9 @@ void VescToSTM_enable_timeout(bool enbale){
 void VescToSTM_pwm_stop(void){
 	if(PWM_Handle_M1._Super.PWM_off == false){
 		PWMC_SwitchOffPWM(&PWM_Handle_M1._Super);
+#ifdef G30P
+		G30SL_OnPwmStop(&G30Sensorless_M1);
+#endif
 		PIDIdHandle_M1.wIntegralTerm = 0;
 		PIDIqHandle_M1.wIntegralTerm = 0;
 		FOCVars[M1].Vqd.d=0;
@@ -322,13 +330,20 @@ void VescToSTM_pwm_stop(void){
 
 void VescToSTM_pwm_start(void){
 	if(PWM_Handle_M1._Super.PWM_off){
+#ifdef G30P
+		/* Normal torque is kick-start only. Explicit open-loop motor detection bypasses
+		 * the rolling gate, but never marks the sensorless observer active. */
+		if(!G30SL_PreparePwmStart(&G30Sensorless_M1)) return;
+#endif
 		float fVd = 32768.0 / VescToSTM_get_bus_voltage() * motor_voltage;
 		utils_truncate_number(&fVd, -32767, 32767);
 		PIDIqHandle_M1.wIntegralTerm = fVd * TF_KIDIV;
 		PIDIdHandle_M1.wIntegralTerm = -PIDIqHandle_M1.wIntegralTerm/4;
+#ifndef G30P
 		HALL_M1._Super.hElAngle = HALL_M1.MeasuredElAngle;
 		HALL_M1.CompSpeed = 0;
 		HALL_M1._Super.hAvrMecSpeedUnit = 0;
+#endif
 		PWMC_SwitchOnPWM(&PWM_Handle_M1._Super);
 	}
 }
@@ -591,7 +606,9 @@ int32_t VescToSTM_get_erpm(){
  * erpm
  */
 int32_t VescToSTM_get_erpm_fast(){
-	int32_t speed = ( (  HALL_M1._Super.hElSpeedDpp * ( int32_t )HALL_M1._Super.hMeasurementFrequency * (int32_t) SPEED_UNIT ) / (( int32_t ) HALL_M1._Super.DPPConvFactor));
+	SpeednPosFdbk_Handle_t *spd = SpeednTorqCtrlM1.SPD;
+	int32_t speed = ((spd->hElSpeedDpp * (int32_t)spd->hMeasurementFrequency * (int32_t)SPEED_UNIT) /
+				 ((int32_t)spd->DPPConvFactor));
 	return VescToSTM_speed_to_erpm(speed);
 }
 
@@ -682,13 +699,13 @@ float VescToSTM_get_speed(void) {
  * be this number divided by (3 * MOTOR_POLE_NUMBER).
  */
 int32_t VescToSTM_get_tachometer_value(bool reset) {
+#ifdef G30P
+	return G30SL_GetTacho(&G30Sensorless_M1, reset);
+#else
 	int val = HALL_M1.tachometer;
-
-	if (reset) {
-		HALL_M1.tachometer = 0;
-	}
-
+	if (reset) HALL_M1.tachometer = 0;
 	return val;
+#endif
 }
 
 /**
@@ -702,13 +719,13 @@ int32_t VescToSTM_get_tachometer_value(bool reset) {
  * be this number divided by (3 * MOTOR_POLE_NUMBER).
  */
 int32_t VescToSTM_get_tachometer_abs_value(bool reset) {
+#ifdef G30P
+	return G30SL_GetTachoAbs(&G30Sensorless_M1, reset);
+#else
 	int val = HALL_M1.tachometer_abs;
-
-	if (reset) {
-		HALL_M1.tachometer_abs = 0;
-	}
-
+	if (reset) HALL_M1.tachometer_abs = 0;
 	return val;
+#endif
 }
 
 /**
