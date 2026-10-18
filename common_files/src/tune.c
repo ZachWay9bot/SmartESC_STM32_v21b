@@ -89,7 +89,12 @@ bool tune_mcpwm_foc_hall_detect(float current, uint8_t *hall_table) {
 	}
 	//HALL_M1.PhaseShift = old_phase_shift;
 	VescToSTM_enable_timeout(true);
+#ifdef G30P
+	/* Detection must leave the G30 bridge positively off on every exit path. */
+	VescToSTM_pwm_force(false, false);
+#else
 	VescToSTM_pwm_force(false, true);
+#endif
 	return fails == 2;
 }
 
@@ -149,7 +154,12 @@ float tune_foc_measure_resistance(float current, int samples) {
 
 	// Enable timeout
 	VescToSTM_enable_timeout(true);
+#ifdef G30P
+	/* Detection must leave the G30 bridge positively off on every exit path. */
+	VescToSTM_pwm_force(false, false);
+#else
 	VescToSTM_pwm_force(false, true);
+#endif
 	return (voltage_avg / current_avg) / (SQRT_3) / 2.0;
 }
 
@@ -236,7 +246,12 @@ float tune_foc_measure_inductance(float voltage, float * used_current, uint32_t 
 
 	// Enable timeout
 	VescToSTM_enable_timeout(true);
+#ifdef G30P
+	/* Detection must leave the G30 bridge positively off on every exit path. */
+	VescToSTM_pwm_force(false, false);
+#else
 	VescToSTM_pwm_force(false, true);
+#endif
 	return inductance / SQRT_3 / 2.0;
 }
 
@@ -427,7 +442,12 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 
 		result = true;
 	}
+#ifdef G30P
+	/* Detection must leave the G30 bridge positively off on every exit path. */
+	VescToSTM_pwm_force(false, false);
+#else
 	VescToSTM_pwm_force(false, true);
+#endif
 	VescToSTM_enable_timeout(true);
 	return result;
 }
