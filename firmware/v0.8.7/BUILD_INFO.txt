@@ -1,0 +1,6 @@
+SmartESC G30 NativeDash v0.8.7
+Source commit: a1906eb7a41889a1dc8f5e299db85be72db57ade
+Workflow run: 181
+Built: 2026-10-18T22:05:28Z
+95777 firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+55248 firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
