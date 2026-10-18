@@ -541,57 +541,50 @@ void utils_byte_to_binary(int x, char *b) {
 }
 
 float utils_throttle_curve(float val, float curve_acc, float curve_brake, int mode) {
-	float ret = 0.0;
-	
-	if (val < -1.0) {
-		val = -1.0;
-	}
+	float ret = 0.0f;
+	if (val < -1.0f) val = -1.0f;
+	if (val > 1.0f) val = 1.0f;
 
-	if (val > 1.0) {
-		val = 1.0;
-	}
-	
 	float val_a = fabsf(val);
+	float curve = val >= 0.0f ? curve_acc : curve_brake;
 
-	float curve;
-	if (val >= 0.0) {
-		curve = curve_acc;
+#ifdef G30P
+	/*
+	 * G30 SHU build: preserve endpoints/sign and a tunable curve without
+	 * dragging pow()/exp() and the large double-precision libm path into flash.
+	 */
+	if (mode == 0 || mode == 1 || mode == 2) {
+		if (curve >= 0.0f) {
+			ret = 1.0f - ((1.0f - val_a) / (1.0f + curve * val_a));
+		} else {
+			ret = val_a / (1.0f - curve * (1.0f - val_a));
+		}
 	} else {
-		curve = curve_brake;
-	}
-
-	// See
-	// http://math.stackexchange.com/questions/297768/how-would-i-create-a-exponential-ramp-function-from-0-0-to-1-1-with-a-single-val
-	if (mode == 0) { // Exponential
-		if (curve >= 0.0) {
-			ret = 1.0 - pow(1.0 - val_a, 1.0 + curve);
-		} else {
-			ret = pow(val_a, 1.0 - curve);
-		}
-	} else if (mode == 1) { // Natural
-		if (fabsf(curve) < 1e-10) {
-			ret = val_a;
-		} else {
-			if (curve >= 0.0) {
-				ret = 1.0 - ((qfp_fexp(curve * (1.0 - val_a)) - 1.0) / (qfp_fexp(curve) - 1.0));
-			} else {
-				ret = (qfp_fexp(-curve * val_a) - 1.0) / (qfp_fexp(-curve) - 1.0);
-			}
-		}
-	} else if (mode == 2) { // Polynomial
-		if (curve >= 0.0) {
-			ret = 1.0 - ((1.0 - val_a) / (1.0 + curve * val_a));
-		} else {
-			ret = val_a / (1.0 - curve * (1.0 - val_a));
-		}
-	} else { // Linear
 		ret = val_a;
 	}
-
-	if (val < 0.0) {
-		ret = -ret;
+#else
+	if (mode == 0) {
+		if (curve >= 0.0f) ret = 1.0f - pow(1.0f - val_a, 1.0f + curve);
+		else ret = pow(val_a, 1.0f - curve);
+	} else if (mode == 1) {
+		if (fabsf(curve) < 1e-10f) {
+			ret = val_a;
+		} else if (curve >= 0.0f) {
+			ret = 1.0f - ((qfp_fexp(curve * (1.0f - val_a)) - 1.0f) /
+						(qfp_fexp(curve) - 1.0f));
+		} else {
+			ret = (qfp_fexp(-curve * val_a) - 1.0f) /
+					(qfp_fexp(-curve) - 1.0f);
+		}
+	} else if (mode == 2) {
+		if (curve >= 0.0f) ret = 1.0f - ((1.0f - val_a) / (1.0f + curve * val_a));
+		else ret = val_a / (1.0f - curve * (1.0f - val_a));
+	} else {
+		ret = val_a;
 	}
+#endif
 
+	if (val < 0.0f) ret = -ret;
 	return ret;
 }
 
