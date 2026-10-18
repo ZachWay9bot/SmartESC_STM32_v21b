@@ -1,239 +1,166 @@
-# SmartESC
+# SmartESC G30 NativeDash v0.8.7
 
-> [!CAUTION]
-> ## UNVALIDATED HARDWARE TEST BUILD
->
-> **DeltaESC is not yet fully validated on real G30D power hardware. Do not blindly install or flash this firmware on a controller that you cannot recover with ST-Link/SWD.**
->
-> The Android stock-ESC diagnostic path has been hardware-validated, but this does **not** validate the DeltaESC motor-control firmware itself. Full validation is still pending for real-world motor operation, SHU rollback/recovery, STAR/DELTA switching under load, BMS edge cases and fault handling.
->
-> First hardware tests should only be performed by experienced users with **ST-Link/SWD access and a verified full 128 KiB flash backup**. Until those tests are complete, installation on a daily-use or non-recoverable controller is explicitly discouraged.
+Current primary target: **Ninebot MAX G30 / G30D 3-cap STM32F103 ESC**.
 
+This fork is now focused on the G30 sensorless branch. The old M365 target, old ESP32 serial-throttle experiment and historical reference documents are kept under `legacy/` so the repository root reflects the firmware that is actually being developed.
 
-**SmartESC (aka SESC) is an alternative firmware for Xiaomi M365 and Ninebot G30 controller.**
+> **Status: active hardware-development build.**
+> The sensorless startup and motor-parameter detection are based on hardware-validated XBOT/G30 work, but this exact v0.8.7 integration still needs the current 24 V bench validation before road use.
 
-![image](https://user-images.githubusercontent.com/11454444/148704200-e28ee13e-c91b-4aac-8dbf-6021095749a5.png)
+## Current firmware
 
+**SmartESC G30 NativeDash v0.8.7**
 
-> ## G30D SmartESC Config v0.2 — current hardware-test candidate
->
-> This fork contains a G30D-specific SmartESC build with SHU flashing/recovery, stock dashboard + BMS support, true coast/no-regen, automatic STAR/DELTA switching and a dedicated Android configuration app.
->
-> **Candidate branch:** `candidate/g30-config-app-v0.2`  
-> **Candidate commit:** `f7c22f4859ef28fa3ce29499b5d79cd8aa3267df`
->
-> Current v0.2 feature set:
-> - stock G30 dashboard on PA2 / USART2 half-duplex
-> - throttle, speed display and Eco / Drive / Sport
-> - brake input = motor cut; no regenerative braking
-> - true coast on throttle release
-> - stock G30 BMS on USART3 (PB10/PB11)
-> - BMS activator heartbeat + SOC/current/voltage/temperature/status telemetry
-> - dashboard battery percentage from BMS SOC when valid
-> - automatic STAR/DELTA using the former rear-light output
-> - configurable DELTA/STAR thresholds, max switch Iq and relay settle time
-> - separate STAR and DELTA R/L/flux/current profiles
-> - VESC-style motor setup: R/L measurement, open-loop flux measurement and Hall detection
-> - DELTA setup only after a valid STAR profile; Hall result is cross-checked
-> - profile swap while PWM is off; FOC Kp/Ki is recalculated per topology
-> - stock 4 KiB Ninebot IAP bootloader preserved
-> - SHU ZIPv3 package with plain + NinebotTEA-encrypted firmware
-> - dedicated Android **SmartESC Config** app instead of the SHFW-only SHU Config UI
-> - Android BLE transport includes legacy NinebotCrypto 5B/5C/5D authentication
->
-> Current CI for the candidate commit is green:
-> - **Build G30 SHU candidate #36:** success
-> - **Build on commit #69:** success
-> - **Build SmartESC Config APK #23:** success
-> - Android protocol/NinebotCrypto unit tests: success
-> - G30 firmware: **0 errors / 0 warnings**
-> - `g30p.bin`: **48,864 bytes** inside the stock 52 KiB application window
->
-> **Important:** this is a hardware-test candidate. The code/build/package path is validated, but real G30D validation is still required for BLE forwarding of the private config protocol, motor detection in both topologies, relay switching under load, BMS current-limit behavior and SHU → stock/SHFW rollback. Keep ST-Link and a verified 128 KiB full-flash backup available for the first test.
->
-> **Candidate branch:** [candidate/g30-config-app-v0.2](../../tree/candidate/g30-config-app-v0.2)  
-> **Candidate PR:** [#3 — G30 SmartESC Config v0.2](../../pull/3)  
-> **v0.2 documentation:** [docs/G30D_SMARTESC_CONFIG_V0_2.md](docs/G30D_SMARTESC_CONFIG_V0_2.md)  
-> **Android source:** [android/SmartESCConfig on the candidate branch](../../tree/candidate/g30-config-app-v0.2/android/SmartESCConfig)
->
-> The older pre-config freeze remains available for reference:
-> [freeze/g30-shu-coast-delta-bms-2026-09-30](../../tree/freeze/g30-shu-coast-delta-bms-2026-09-30)
+CI reference: **G30 SHU build #87**  
+Merged G30 implementation: `b71510a994d88ebcf7395c459798327e9f20e01f`
 
-# Overview
+Main features:
 
-## This fork: G30D SHU build
+- sensorless FOC for G30-style hub motors
+- intended for both G30 **Gen1 (6-prefix)** and **Gen2 (9-prefix)** motors by measuring the connected motor instead of hard-coding a serial-number profile
+- VESC Tool 6.06 protocol on the IoT/service UART
+- one-click **Setup Motors FOC / Detect All (no CAN)**
+- R, L and flux-linkage measurement
+- automatic current-controller and observer parameter calculation
+- native G30 dashboard protocol on the Yellow Wire
+- throttle + brake input from the original dashboard
+- brake has priority over throttle
+- dashboard speed, battery, light, beep and fault status
+- native `5A A5` Ninebot framing
+- 3-second application recovery/IAP path
+- stock Ninebot bootloader retained
 
-The G30D build in this fork is intentionally different from the original upstream SmartESC firmware.
+## VESC Tool
 
-### What is retained / supported
+Recommended host version: **VESC Tool 6.06 Stable**.
 
-- stock G30 dashboard on the original yellow 1-wire line (PA2 / USART2)
-- throttle, speed display and Eco / Drive / Sport
-- brake input as **motor cut / coast**, with no regenerative braking
-- true coast when throttle is released
-- stock G30 BMS communication on USART3 (PB10/PB11)
-- BMS activator heartbeat plus read-only SOC/current/voltage/temperature/status telemetry
-- dashboard battery percentage from real BMS SOC when available
-- automatic STAR/DELTA control using the former rear-light output
-- stock 4 KiB Ninebot IAP bootloader preserved
-- SHU-compatible ZIPv3 package with plain and NinebotTEA-encrypted firmware
-- stationary handoff back to the preserved stock IAP bootloader for future SHU flashing / revert
+Service connection:
 
-### Bluetooth / SHU firmware updates
+- USART1 remap: **PB6 TX / PB7 RX**
+- 115200 baud, 8N1
+- USB-UART at 3.3 V logic level
+- connect directly to the controller service/IoT UART
 
-The original upstream SmartESC normally overwrites the stock application/boot layout and therefore loses the normal Ninebot Bluetooth firmware-update path.
+For a new motor:
 
-**That statement does not apply to this G30D SHU build.**
+1. connect VESC Tool
+2. open **Setup Motors FOC / Detect All**
+3. use **Run Detection (no CAN)**
+4. keep the wheel/motor free
+5. validate the measured values before any high-power test
 
-This fork relocates SmartESC to `0x08001000` and deliberately preserves the stock Ninebot IAP bootloader at `0x08000000..0x08000FFF`. The firmware contains a SHU update handoff so a firmware update initiated through ScooterHacking Utility can reboot into the preserved stock IAP bootloader.
+The G30 detector deliberately uses conservative bench limits and does not run CAN or Hall detection.
 
-So the intended G30D workflow is:
+For the currently measured reference motor, a useful plausibility region is around:
 
-```
-SHU / Bluetooth
-      ↓
-SmartESC G30D
-      ↓
-preserved stock IAP bootloader
-      ↓
-new SmartESC / stock / SHFW DRV
+```text
+R phase  ~ 0.58 ohm
+Ld       ~ 0.64 mH
+Flux     ~ 0.012 Wb
 ```
 
-The packaging and handoff code are implemented and CI-tested. The complete **SmartESC -> SHU -> stock/SHFW** rollback path still needs the first real-controller hardware validation, so keep ST-Link recovery available for that first test.
+These are reference values only. The whole point of Detect All is to measure the actual connected Gen1/Gen2 motor.
 
-### Current limitations
+## Native G30 dashboard
 
-- Hall sensors are still required; there is no sensorless mode in this build.
-- The first real-controller validation of SHU revert and the BMS no-communication current-limit behavior is still pending.
-- The compact SHU build uses `SESC_SHU_LITE`; the full VESC Tool stack is disabled to stay inside the stock 52 KiB application window.
-- Motor/current setup for this G30D build is handled by the dedicated **SmartESC Config** Android app.
-- The old upstream M365 BMS limitation applies to M365 support, not to the G30D stock-BMS integration described above.
+The original G30 dashboard uses **USART2 / PA2**, 115200 baud, half duplex.
 
-For the current v0.2 motor/configuration workflow, see [docs/G30D_SMARTESC_CONFIG_V0_2.md](docs/G30D_SMARTESC_CONFIG_V0_2.md). The older frozen base is documented in [docs/G30D_SHU_COAST_DELTA_BMS.md](docs/G30D_SHU_COAST_DELTA_BMS.md).
+Implemented native framing:
 
-# Download
-
-The current G30D hardware-test candidate is pinned to:
-
-```
-branch: candidate/g30-config-app-v0.2
-commit: f7c22f4859ef28fa3ce29499b5d79cd8aa3267df
+```text
+5A A5 | LEN | SRC | DST | CMD | ARG | DATA... | CRC16
 ```
 
-GitHub Actions artifacts for that exact commit:
+Relevant dashboard traffic:
 
-- firmware: **SmartESC-G30-Config-SHU-36**
-- Android app: **SmartESC-Config-Android-23**
-- full build/regression: **Build on commit #69**
+- `0x61`, `0x64`, `0x65`: lever/control frames can carry throttle and brake
+- only incoming dashboard `CMD64` is answered with the normal ESC status heartbeat
+- ESC -> dashboard `CMD64` status payload:
+  `[Mode, Battery, Light, Beep, Speed, Fault]`
 
-Use PR #3 and the candidate branch links above to avoid accidentally testing a later development commit.
+Register reads are a different protocol layer. In particular:
 
-The original upstream M365 release information remains available from the upstream SmartESC project.
+- `0x26` = speed register
+- `0x29 / 0x2A` = odometer low/high
 
+A raw byte such as `0x29` inside a lever heartbeat is therefore not automatically the speed register.
 
-# Build
+## Safety / control behaviour
 
-Current development build status: [![Build on commit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml/badge.svg?branch=feature%2Fg30-config-app)](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_on_commit.yml)
+The default ADC control type is **Current No Reverse Brake ADC**. When brake is active, braking is commanded and throttle is not applied in that control cycle.
 
-Android app workflow: [Build SmartESC Config APK](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_config_app.yml)
+Normal sensorless drive is kick-start/flying-start oriented. A valid rolling/BEMF lock is required before ordinary torque is accepted. The Detect All open-loop measurement path is separate and can intentionally rotate the motor from standstill during detection.
 
-G30 SHU candidate workflow: [Build G30 SHU candidate](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/workflows/build_g30_shu.yml)
+Start testing at low bus voltage with current limiting and a free wheel. Do not jump directly from a successful software build to a 14S road test. Silicon is notoriously bad at reading GitHub badges.
 
-If you want to build it manually, for an easier build, you need `git` and `docker`.
+## Recovery / flash layout
 
-## Clone the project
-`git clone https://github.com/ZachWay9bot/SmartESC_STM32_v21b.git`
+The stock Ninebot bootloader is preserved.
 
-## Build on Linux
-Launch from terminal:
+```text
+0x08000000 .. 0x08000FFF   stock bootloader
+0x08001000 .. 0x0800E7FF   SmartESC application window (54 KiB)
+0x0800E800 ..              stock OTA staging
+0x0801C400                 SmartESC APP config
+0x0801C800                 SmartESC motor config
+0x0801F800                 stock update control
+```
 
-`chmod +x docker_build*; ./docker_build_m365.sh`
+Application-level recovery:
 
-`chmod +x docker_build*; ./docker_build_g30.sh`
+- hold the power button for at least **3 seconds during power-up**
+- recovery UART: PB6/PB7, 115200
+- recovery identity: `XBOTRCV1V00001`
+- command family: `0x07 BEGIN -> 0x08 WRITE -> 0x09 FINALIZE -> 0x0A RESET`
 
-## Build on Windows
-Double click :
+The application recovery cannot help if the application itself is completely unable to execute. The untouched stock bootloader remains the lower-level recovery boundary.
 
-`docker_build_m365.sh`
+## Build
 
-`docker_build_g30.sh`
+G30 build:
 
+```bash
+./docker_build_g30p.sh
+```
 
-# Programming
+The application binary is generated under:
 
-## G30D SHU build
+```text
+g30p/STM32CubeIDE/Debug/g30p.bin
+```
 
-The intended install/update path for the G30D candidate is **ScooterHacking Utility (SHU) over Bluetooth**. Configuration and motor setup are then performed with the dedicated **SmartESC Config** Android app.
+Build a ScooterHacking ZIPv3 package with:
 
-For the **first hardware test**, keep an ST-Link connected or immediately available and save a complete 128 KiB flash backup before flashing. This remains the recovery path while the SHU handoff and BLE configuration path are being validated on real hardware.
+```bash
+python3 tools/make_shu_zip.py \
+  g30p/STM32CubeIDE/Debug/g30p.bin \
+  SmartESC_G30_NativeDash_v0.8.7_SHU.zip \
+  --name "SmartESC G30 NativeDash v0.8.7"
+```
 
-A SHU package is produced by the **Build G30 SHU candidate** workflow and the APK by **Build SmartESC Config APK**.
+GitHub Actions workflow **Build G30 SHU candidate** performs the same G30 build, validates the app window/vector table and uploads the BIN/ELF/MAP plus SHU package.
 
-## ST-Link recovery / original upstream programming
+## Repository layout
 
-ST-Link is still useful for recovery, full-flash backups and original upstream/M365 flashing.
+```text
+g30p/          current G30 STM32CubeIDE target
+common_files/  current shared motor-control / VESC / dashboard code
+tools/         SHU packaging and project tools
+Hardware/      hardware reference material
+docs/          current project notes
+legacy/        historical M365 target, old experiments and reference docs
+```
 
-Plug the ST-Link following this schematic:
+The `legacy/` tree is retained for archaeology and upstream history. It is not the current product target.
 
-![image](https://user-images.githubusercontent.com/11454444/146688635-b5a1ed07-3482-420f-b324-9e58b0a19dc9.png)
+## Current development priorities
 
-With [STM32 ST-Link Utility](https://www.st.com/en/development-tools/stsw-link004.html), the option bytes/read protection can be inspected when required.
+1. validate v0.8.7 Detect All on the current 24 V hardware setup
+2. verify Gen1 and Gen2 motor detection ranges
+3. validate native dashboard throttle/brake plus speed/battery display on hardware
+4. audit pole-count semantics before high-speed/road qualification
+5. qualify limits and fault handling before 14S operation
 
-# VescTool
+## Credits
 
-The **G30D SHU v0.2** candidate uses `SESC_SHU_LITE` to fit inside the stock 52 KiB application region, so the full VESC Tool stack is intentionally disabled.
-
-For this G30D build, the replacement setup path is the dedicated **SmartESC Config** Android app. It provides current limits, live telemetry, persistent configuration, STAR/DELTA profiles and the R/L/flux/Hall motor-detection workflow.
-
-The information below applies only to the original/full SmartESC builds that include the VESC interface.
-
-Use [VescTool](https://vesc-project.com/vesc_tool) to setup the motor and input properties.
-
-Use a serial USB adapter to connect the Xiaomi controller as an USB VESC :
-![image](https://user-images.githubusercontent.com/11454444/146688647-e3e4d833-7c93-4b4b-a297-cc61ba52071e.png)
-
-Launch VESCTool and connect with COM port.
-![image](https://user-images.githubusercontent.com/11454444/146687240-e393ea2e-dfd9-4fac-870e-4cf526a61187.png)
-
-Launcher Motor setup wizzard.
-![image](https://user-images.githubusercontent.com/11454444/146688494-b4a6c183-a89f-4517-af1f-61b5358aad40.png)
-
-Enter all your settings in the different windows.
-
-Enable the keyboard control :
-
-![image](https://user-images.githubusercontent.com/11454444/146688470-adf8a8f7-e3b4-43f4-9038-479d3d5585c5.png)
-
-You're ready to test your M365 controller with your keyboard !
-
-
-# ESP32 test module
-
-M365 connections :
-![image](https://user-images.githubusercontent.com/11454444/146688619-c3bc8e6d-6884-4b1c-81d6-9ec456d1e41b.png)
-
-Use ESP32 prototype board with and ESP32-devkit-c module :
-![image](https://user-images.githubusercontent.com/11454444/146688428-d8978339-fab1-4a7b-a88f-305298b6b64f.png)
-
-Use the code provided in the [serial-trottle-brake-esp32](/serial-trottle-brake-esp32) folder with Platform.io
-
-# Error Code SESC (Smart ESC) in VESC Tool
-
-Can read it in "VESC Terminal" (or others Serial Terminal)
-
-- 0 = MC_NO_ERROR     (No error)
-- 0= MC_NO_FAULTS     (No error)
-- 1 = MC_FOC_DURATION (FOC rate to high)
-- 2 = MC_OVER_VOLT    (Software over voltage)
-- 4 = MC_UNDER_VOLT   (Software under voltage)
-- 8 = MC_OVER_TEMP    (Software over temperature)
-- 16 = MC_START_UP    (Startup failed)
-- 32 = MC_SPEED_FDBK  (Speed feedback)
-- 64 = MC_BREAK_IN    (Emergency input (Over current))
-- 128 = MC_SW_ERROR
-
-# Command available in VESCTool terminal
-
-- help (see all available commands)
-- foc_openloop [current] [erpm]  (Exemple : foc_openloop 10 500)
-- ... (lot of other commands)
+This repository is derived from SmartESC STM32 work and ST Motor Control SDK components, with additional G30/XBOT sensorless, VESC Tool, recovery and native dashboard integration in this fork. Existing upstream copyright/license notices remain with their respective source files.
