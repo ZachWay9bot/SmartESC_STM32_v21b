@@ -338,12 +338,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         VescToSTM_set_brake(-buffer_get_int32(data, &ind));
         VescToSTM_timeout_reset();
     } break;
-    case COMM_SET_RPM: {
-        int32_t ind = 0;
-        VescToSTM_set_speed(buffer_get_int32(data, &ind));
-        VescToSTM_timeout_reset();
-    } break;
-
     case COMM_SET_MCCONF: {
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
@@ -373,18 +367,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * G30 DETECT profile intentionally omits APPCONF and MCCONF_DEFAULT.
      * Live motor config, telemetry and control remain available.
      */
-    case COMM_GET_DECODED_ADC: {
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(24)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_GET_DECODED_ADC;
-        buffer_append_int32(buffer, (int32_t)(app_adc_get_decoded_level() * 1000000.0f), &ind);
-        buffer_append_int32(buffer, (int32_t)(VescToSTM_get_ADC1() * 1000000.0f), &ind);
-        buffer_append_int32(buffer, (int32_t)(app_adc_get_decoded_level2() * 1000000.0f), &ind);
-        buffer_append_int32(buffer, (int32_t)(VescToSTM_get_ADC2() * 1000000.0f), &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
     /*
      * G30 FOC detection. Keep it deliberately conservative: the normal VESC Tool
      * Detect FOC page uses COMM_DETECT_MOTOR_R_L followed by
