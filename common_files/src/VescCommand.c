@@ -437,12 +437,8 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         if (g30_detect_rl(&r, &l_h)) {
             if (g30_detect_flux(r, l_h, &flux)) {
                 mc_configuration *cfg = mc_interface_get_configuration();
-                cfg->motor_type = MOTOR_TYPE_FOC;
-                cfg->sensor_mode = SENSOR_MODE_SENSORLESS;
-                cfg->foc_sensor_mode = FOC_SENSOR_MODE_SENSORLESS;
                 cfg->foc_motor_r = r;
                 cfg->foc_motor_l = l_h;
-                cfg->foc_motor_ld_lq_diff = 0.0f;
                 cfg->foc_motor_flux_linkage = flux;
                 /* Same 1 ms current-controller target used by VESC detection. */
                 cfg->foc_current_kp = l_h * 1000.0f;
