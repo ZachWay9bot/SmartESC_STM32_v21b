@@ -16,6 +16,9 @@ on:
       - 'tools/**'
       - '.github/workflows/**'
 
+permissions:
+  contents: write
+
 jobs:
   g30:
     runs-on: ubuntu-latest
@@ -35,6 +38,40 @@ jobs:
             SmartESC_G30_NativeDash_v0.8.7_SHU.zip \
             --name "SmartESC G30 NativeDash v0.8.7"
 
+      - name: Prepare versioned IAP payload
+        run: |
+          mkdir -p firmware/v0.8.7
+          cp SmartESC_G30_NativeDash_v0.8.7_SHU.zip firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+          python3 - <<'PY'
+          import zipfile
+          z = zipfile.ZipFile('SmartESC_G30_NativeDash_v0.8.7_SHU.zip', 'r')
+          data = z.read('FIRM.bin.enc')
+          open('firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin', 'wb').write(data)
+          print('IAP Driver.bin:', len(data), 'bytes')
+          PY
+          (cd firmware/v0.8.7 && sha256sum SmartESC_G30_NativeDash_v0.8.7_SHU.zip SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin > SHA256SUMS.txt)
+          {
+            echo "SmartESC G30 NativeDash v0.8.7"
+            echo "Source commit: ${GITHUB_SHA}"
+            echo "Workflow run: ${GITHUB_RUN_NUMBER}"
+            echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            wc -c firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+            wc -c firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
+          } > firmware/v0.8.7/BUILD_INFO.txt
+
+      - name: Publish v0.8.7 binaries to repository
+        if: github.event_name == 'push' && github.ref == 'refs/heads/vesc_comp'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+          git add firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
+          git add firmware/v0.8.7/SHA256SUMS.txt firmware/v0.8.7/BUILD_INFO.txt
+          if ! git diff --cached --quiet; then
+            git commit -m "firmware: publish v0.8.7 SHU and IAP binaries [skip ci]"
+            git push origin HEAD:vesc_comp
+          fi
+
       - name: Upload G30 artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -45,3 +82,4 @@ jobs:
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map
             SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+            firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
