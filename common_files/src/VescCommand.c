@@ -50,6 +50,12 @@ static disp_pos_mode display_position_mode;
 
 
 #define PRINTF_STACK_SIZE 128u
+#ifdef G30P
+void commands_printf(PACKET_STATE_t * phandle, const char* format, ...) {
+	(void)phandle;
+	(void)format;
+}
+#else
 void commands_printf(PACKET_STATE_t * phandle, const char* format, ...) {
 	if(phandle==NULL) return;
 	va_list arg;
@@ -66,9 +72,8 @@ void commands_printf(PACKET_STATE_t * phandle, const char* format, ...) {
 		commands_send_packet((unsigned char*)send_buffer,
 				(len < 254) ? len + 1 : 255, phandle);
 	}
-
 }
-
+#endif
 
 
 
