@@ -30,7 +30,7 @@ Known packaged test files from build #87:
 
 ```text
 SHU ZIP SHA-256
-ca0a3e16b6089425160c867c3e259ae314158f6218acf20f110f8b3b2d809a8f
+84e8e3187992a88046a75d519e64ed7cb27962605bffbe5a877a33652a6457c9
 
 IAP Driver.bin SHA-256
 0fb3bc6d6800ed676c3a39845c8787a896b706e2b9fe1ef56815a651c24e584e
@@ -59,3 +59,17 @@ The exact v0.8.7 integration is still a bench candidate. Do not interpret CI suc
 ## Historical material
 
 Old M365 targets, old serial-throttle experiments and the previous reference-document collection are in `legacy/`.
+
+
+## Repository publication
+
+The versioned firmware is now committed under `firmware/v0.8.7/`.
+
+Publish workflow run: **181**
+
+```text
+SHU ZIP   95777 bytes
+IAP BIN   55248 bytes
+```
+
+Current published SHA-256 values are in `firmware/v0.8.7/SHA256SUMS.txt`.
