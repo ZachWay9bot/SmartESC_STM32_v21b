@@ -381,7 +381,7 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         mc_conf.l_current_max = safe_max;
         bool ok = tune_foc_measure_res_ind(&r, &l);
         mc_conf.l_current_max = old_max;
-        if (!ok || !isfinite(r) || !isfinite(l) || r <= 0.0f || l <= 0.0f) {
+        if (!ok || !(r > 0.0f) || !(l > 0.0f)) {
             r = 0.0f; l = 0.0f;
         }
         int32_t ind = 0;
@@ -390,7 +390,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         buffer[ind++] = COMM_DETECT_MOTOR_R_L;
         buffer_append_float32(buffer, r, 1e6f, &ind);
         buffer_append_float32(buffer, l, 1e3f, &ind);
-        buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
         reply_func(send_buffer, ind, phandle);
     } break;
 
@@ -423,7 +422,7 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
          * The upstream SmartESC Vq path reads about one half of coast-BEMF flux,
          * so compensate that known scaling here.
          */
-        if (ok && isfinite(linkage) && linkage > 0.0f) linkage *= 2.0f;
+        if (ok && linkage > 0.0f) linkage *= 2.0f;
         else linkage = 0.0f;
 
         ind = 0;
