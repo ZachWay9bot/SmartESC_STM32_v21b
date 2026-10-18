@@ -79,7 +79,8 @@ void G30SL_Clear(G30Sensorless_Handle_t *h) {
     h->_Super.InstantaneousElSpeedDpp = 0;
     h->_Super.bSpeedErrorNumber = 0u;
     h->active = 0u; h->active_grace = 0u; h->observer_div_cnt = 0u;
-    /* Preserve trip/odometer counters across stop/start cycles. */\n    h->tacho_phase_accum = 0;
+    /* Preserve trip/odometer counters across stop/start cycles. */
+    h->tacho_phase_accum = 0;
     g30sl_core_reset_roll(&h->core);
     h->core.observer_seeded = h->core.observer_valid = 0u;
     h->core.observer_good = h->core.observer_bad = 0u;
