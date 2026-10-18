@@ -239,6 +239,36 @@ void send_position(PACKET_STATE_t * phandle){
 
 #ifdef G30P
 /*
+ * G30-specific FOC detector shared by the individual VESC Tool buttons and
+ * COMM_DETECT_APPLY_ALL_FOC. The limits are deliberately independent of the
+ * values requested by VESC Tool so a generic wizard cannot raise bench power.
+ */
+static bool g30_detect_rl(float *r, float *l_h) {
+    float old_max = mc_conf.l_current_max;
+    float l_uh = 0.0f;
+    mc_conf.l_current_max = 2.0f; /* tune_foc_measure_res_ind uses half of this */
+    bool ok = tune_foc_measure_res_ind(r, &l_uh);
+    mc_conf.l_current_max = old_max;
+    *l_h = l_uh * 1e-6f;
+    return ok && *r > 0.05f && *r < 2.5f && *l_h > 0.00005f && *l_h < 0.003f;
+}
+
+static bool g30_detect_flux(float r, float l_h, float *flux) {
+    float undriven = 0.0f, samples = 0.0f, lambda = 0.0f;
+    bool ok = tune_foc_measure_flux_linkage_openloop(1.5f, 0.15f, 900.0f,
+            r, l_h, &lambda, &undriven, &samples);
+    /*
+     * On this G30 power stage the SmartESC Vq path was hardware-correlated at
+     * about one half of the dedicated coast-BEMF result. Compensate that known
+     * scaling before accepting the value.
+     */
+    lambda *= 2.0f;
+    if (!ok || !(lambda > 0.002f) || !(lambda < 0.04f)) return false;
+    *flux = lambda;
+    return true;
+}
+
+/*
  * Compact G30 dispatcher. The full upstream dispatcher remains below for other
  * targets, but this fast path is the only reachable implementation on G30P.
  * It keeps the VESC Tool configuration wire format and the motor-control
@@ -368,68 +398,72 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * Live motor config, telemetry and control remain available.
      */
     /*
-     * G30 FOC detection. Keep it deliberately conservative: the normal VESC Tool
-     * Detect FOC page uses COMM_DETECT_MOTOR_R_L followed by
-     * COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP.
+     * G30 FOC detection. These two commands keep the manual Detect FOC page
+     * working, while the apply-all command below drives the same measurement
+     * path for VESC Tool's one-click detector.
      */
     case COMM_DETECT_MOTOR_R_L: {
-        float r = 0.0f, l = 0.0f;
-        float old_max = mc_conf.l_current_max;
-        float safe_max = fabsf(old_max);
-        if (safe_max > 2.0f) safe_max = 2.0f;
-        if (safe_max < 0.25f) safe_max = 0.25f;
-        mc_conf.l_current_max = safe_max;
-        bool ok = tune_foc_measure_res_ind(&r, &l);
-        mc_conf.l_current_max = old_max;
-        if (!ok || !(r > 0.0f) || !(l > 0.0f)) {
-            r = 0.0f; l = 0.0f;
-        }
+        float r = 0.0f, l_h = 0.0f;
+        if (!g30_detect_rl(&r, &l_h)) { r = 0.0f; l_h = 0.0f; }
         int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t send_buffer[PACKET_SIZE(16)];
         uint8_t *buffer = send_buffer + PACKET_HEADER;
         buffer[ind++] = COMM_DETECT_MOTOR_R_L;
         buffer_append_float32(buffer, r, 1e6f, &ind);
-        buffer_append_float32(buffer, l, 1e3f, &ind);
+        buffer_append_float32(buffer, l_h * 1e6f, 1e3f, &ind);
         reply_func(send_buffer, ind, phandle);
     } break;
 
     case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP: {
+        int32_t ri = 0;
+        (void)buffer_get_float32(data, 1e3f, &ri);
+        (void)buffer_get_float32(data, 1e3f, &ri);
+        (void)buffer_get_float32(data, 1e3f, &ri);
+        float r = buffer_get_float32(data, 1e6f, &ri);
+        float l_h = len >= (uint32_t)ri + 4u ? buffer_get_float32(data, 1e8f, &ri) : mc_conf.foc_motor_l;
+        float flux = 0.0f;
+        (void)g30_detect_flux(r, l_h, &flux);
         int32_t ind = 0;
-        float current = buffer_get_float32(data, 1e3f, &ind);
-        float erpm_per_sec = buffer_get_float32(data, 1e3f, &ind);
-        float duty = buffer_get_float32(data, 1e3f, &ind);
-        float resistance = buffer_get_float32(data, 1e6f, &ind);
-        float inductance = 0.0f;
-        if (len >= (uint32_t)ind + 4u) {
-            inductance = buffer_get_float32(data, 1e8f, &ind);
-        }
-
-        if (current < 0.0f) current = -current;
-        if (current > 2.0f) current = 2.0f;
-        if (duty < 0.03f) duty = 0.03f;
-        if (duty > 0.15f) duty = 0.15f;
-        if (erpm_per_sec < 100.0f) erpm_per_sec = 100.0f;
-        if (erpm_per_sec > 1200.0f) erpm_per_sec = 1200.0f;
-
-        float linkage = 0.0f, linkage_undriven = 0.0f, undriven_samples = 0.0f;
-        bool ok = tune_foc_measure_flux_linkage_openloop(current, duty,
-                erpm_per_sec, resistance, inductance,
-                &linkage, &linkage_undriven, &undriven_samples);
-
-        /*
-         * XBOT/G30 phase-voltage scaling was hardware-correlated against the
-         * dedicated coast-BEMF channels in the v0.4.0 parameter-detect milestone.
-         * The upstream SmartESC Vq path reads about one half of coast-BEMF flux,
-         * so compensate that known scaling here.
-         */
-        if (ok && linkage > 0.0f) linkage *= 2.0f;
-        else linkage = 0.0f;
-
-        ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t send_buffer[PACKET_SIZE(12)];
         uint8_t *buffer = send_buffer + PACKET_HEADER;
         buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
-        buffer_append_float32(buffer, linkage, 1e7f, &ind);
+        buffer_append_float32(buffer, flux, 1e7f, &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_DETECT_APPLY_ALL_FOC: {
+        float r = 0.0f, l_h = 0.0f, flux = 0.0f;
+        int16_t res = -100;
+        if (g30_detect_rl(&r, &l_h)) {
+            if (g30_detect_flux(r, l_h, &flux)) {
+                mc_configuration *cfg = mc_interface_get_configuration();
+                cfg->motor_type = MOTOR_TYPE_FOC;
+                cfg->sensor_mode = SENSOR_MODE_SENSORLESS;
+                cfg->foc_sensor_mode = FOC_SENSOR_MODE_SENSORLESS;
+                cfg->foc_motor_r = r;
+                cfg->foc_motor_l = l_h;
+                cfg->foc_motor_ld_lq_diff = 0.0f;
+                cfg->foc_motor_flux_linkage = flux;
+                /* Same 1 ms current-controller target used by VESC detection. */
+                cfg->foc_current_kp = l_h * 1000.0f;
+                cfg->foc_current_ki = r * 1000.0f;
+                cfg->foc_observer_gain = 1000.0f / (flux * flux);
+                conf_general_setup_mc(cfg);
+                if (conf_general_store_mc_configuration(cfg, false)) {
+                    /* Utility::detectAllFoc expects the fresh MCConf before result. */
+                    commands_send_mcconf(COMM_GET_MCCONF, cfg, phandle);
+                    res = 0;
+                }
+            } else {
+                res = -10; /* VESC Tool: flux linkage detection failed */
+            }
+        }
+
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(8)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
+        buffer_append_int16(buffer, res, &ind);
         reply_func(send_buffer, ind, phandle);
     } break;
 
