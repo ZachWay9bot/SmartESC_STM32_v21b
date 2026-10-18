@@ -466,9 +466,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     case COMM_ALIVE:
         VescToSTM_timeout_reset();
         break;
-    case COMM_REBOOT:
-        NVIC_SystemReset();
-        break;
     default:
         break;
     }
