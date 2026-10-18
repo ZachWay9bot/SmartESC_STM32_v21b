@@ -8,7 +8,21 @@ Reference CI build #87:
 
 - FIRM.bin: 55240 bytes
 - FIRM.bin.enc: 55248 bytes
-- SHU ZIP SHA-256: `ca0a3e16b6089425160c867c3e259ae314158f6218acf20f110f8b3b2d809a8f`
+- SHU ZIP SHA-256: `84e8e3187992a88046a75d519e64ed7cb27962605bffbe5a877a33652a6457c9`
 - IAP Driver.bin SHA-256: `0fb3bc6d6800ed676c3a39845c8787a896b706e2b9fe1ef56815a651c24e584e`
 
 Use the **Build G30 NativeDash on commit** or **Build G30 SHU candidate** workflow for reproducible current binaries.
+
+
+## Published repository files
+
+The versioned v0.8.7 binaries are committed directly under `firmware/v0.8.7/`.
+
+Current repository-published hashes:
+
+```text
+84e8e3187992a88046a75d519e64ed7cb27962605bffbe5a877a33652a6457c9  SmartESC_G30_NativeDash_v0.8.7_SHU.zip
+0fb3bc6d6800ed676c3a39845c8787a896b706e2b9fe1ef56815a651c24e584e  SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
+```
+
+The encrypted IAP payload is byte-identical to the validated build #87 payload. The ZIP hash changed when the SHU archive was reproducibly regenerated and committed because ZIP container metadata differs; firmware payload hashes remain the meaningful binary identity.
