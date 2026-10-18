@@ -232,9 +232,238 @@ void send_position(PACKET_STATE_t * phandle){
 
 
 
+#ifdef G30P
+/*
+ * Compact G30 dispatcher. The full upstream dispatcher remains below for other
+ * targets, but this fast path is the only reachable implementation on G30P.
+ * It keeps the VESC Tool configuration wire format and the motor-control
+ * commands needed for setup/telemetry while allowing unused command families
+ * to be garbage-collected from the 50 KiB SHU application.
+ */
+static void commands_process_packet_g30(unsigned char *data, unsigned int len,
+        void(*reply_func)(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle),
+        PACKET_STATE_t * phandle) {
+    if (!len || !reply_func) return;
+
+    COMM_PACKET_ID packet_id = (COMM_PACKET_ID)data[0];
+    data++;
+    len--;
+    send_func = reply_func;
+
+    switch (packet_id) {
+    case COMM_FW_VERSION: {
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(60)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_FW_VERSION;
+        buffer[ind++] = FW_VERSION_MAJOR;
+        buffer[ind++] = FW_VERSION_MINOR;
+        strcpy((char*)(buffer + ind), HW_NAME);
+        ind += strlen(HW_NAME) + 1;
+        ind += VescToSTM_get_uid(buffer + ind, 12);
+        buffer[ind++] = appconf.pairing_done;
+        buffer[ind++] = FW_TEST_VERSION_NUMBER;
+        buffer[ind++] = HW_TYPE_VESC;
+        buffer[ind++] = 0; /* no custom config */
+        buffer[ind++] = 0; /* no phase filters */
+        buffer[ind++] = 0;
+        buffer[ind++] = 0;
+        fw_version_sent_cnt++;
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_GET_VALUES:
+    case COMM_GET_VALUES_SELECTIVE: {
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(96)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = packet_id;
+        uint32_t mask = 0xFFFFFFFFu;
+        if (packet_id == COMM_GET_VALUES_SELECTIVE) {
+            int32_t ri = 0;
+            mask = buffer_get_uint32(data, &ri);
+            buffer_append_uint32(buffer, mask, &ind);
+        }
+        if (mask & (1u << 0))  buffer_append_float16(buffer, VescToSTM_get_temperature(), 1e1, &ind);
+        if (mask & (1u << 1))  buffer_append_float16(buffer, VescToSTM_get_temperature2(), 1e1, &ind);
+        if (mask & (1u << 2))  buffer_append_float32(buffer, VescToSTM_get_phase_current(), 1e2, &ind);
+        if (mask & (1u << 3))  buffer_append_float32(buffer, VescToSTM_get_input_current(), 1e2, &ind);
+        if (mask & (1u << 4))  buffer_append_float32(buffer, VescToSTM_get_id(), 1e2, &ind);
+        if (mask & (1u << 5))  buffer_append_float32(buffer, VescToSTM_get_iq(), 1e2, &ind);
+        if (mask & (1u << 6))  buffer_append_float16(buffer, VescToSTM_get_duty_cycle_now(), 1e3, &ind);
+        if (mask & (1u << 7))  buffer_append_float32(buffer, VescToSTM_get_erpm(), 1e0, &ind);
+        if (mask & (1u << 8))  buffer_append_float16(buffer, VescToSTM_get_bus_voltage(), 1e1, &ind);
+        if (mask & (1u << 9))  buffer_append_float32(buffer, VescToSTM_get_amp_hours(false), 1e4, &ind);
+        if (mask & (1u << 10)) buffer_append_float32(buffer, 0.0f, 1e4, &ind);
+        if (mask & (1u << 11)) buffer_append_float32(buffer, VescToSTM_get_watt_hours(false), 1e4, &ind);
+        if (mask & (1u << 12)) buffer_append_float32(buffer, 0.0f, 1e4, &ind);
+        if (mask & (1u << 13)) buffer_append_int32(buffer, VescToSTM_get_tachometer_value(false), &ind);
+        if (mask & (1u << 14)) buffer_append_int32(buffer, VescToSTM_get_tachometer_abs_value(false), &ind);
+        if (mask & (1u << 15)) buffer[ind++] = VescToSTM_get_fault();
+        if (mask & (1u << 16)) buffer_append_float32(buffer, VescToSTM_get_pid_pos_now(), 1e6, &ind);
+        if (mask & (1u << 17)) buffer[ind++] = app_get_configuration()->controller_id;
+        if (mask & (1u << 18)) {
+            buffer_append_float16(buffer, 0.0f, 1e1, &ind);
+            buffer_append_float16(buffer, 0.0f, 1e1, &ind);
+            buffer_append_float16(buffer, 0.0f, 1e1, &ind);
+        }
+        if (mask & (1u << 19)) buffer_append_float32(buffer, VescToSTM_get_Vd(), 1e3, &ind);
+        if (mask & (1u << 20)) buffer_append_float32(buffer, VescToSTM_get_Vq(), 1e3, &ind);
+        if (mask & (1u << 21)) buffer[ind++] = VescToSTM_get_timeout_state() ? 1u : 0u;
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_SET_DUTY: {
+        int32_t ind = 0;
+        VescToSTM_set_current_rel((float)buffer_get_int32(data, &ind) / 100000.0f);
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_CURRENT: {
+        int32_t ind = 0;
+        VescToSTM_set_torque(buffer_get_int32(data, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_CURRENT_REL: {
+        int32_t ind = 0;
+        VescToSTM_set_current_rel(buffer_get_float32(data, 1e5, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_CURRENT_BRAKE: {
+        int32_t ind = 0;
+        VescToSTM_set_brake(-buffer_get_int32(data, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_RPM: {
+        int32_t ind = 0;
+        VescToSTM_set_speed(buffer_get_int32(data, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+
+    case COMM_SET_MCCONF: {
+        mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
+        if (!mcconf) break;
+        *mcconf = *mc_interface_get_configuration();
+        if (confgenerator_deserialize_mcconf(data, mcconf)) {
+            conf_general_mcconf_hw_limits(mcconf);
+            conf_general_setup_mc(mcconf);
+            conf_general_store_mc_configuration(mcconf, 0);
+            int32_t ind = 0;
+            uint8_t send_buffer[PACKET_SIZE(8)];
+            uint8_t *buffer = send_buffer + PACKET_HEADER;
+            buffer[ind++] = packet_id;
+            reply_func(send_buffer, ind, phandle);
+        }
+        vPortFree(mcconf);
+    } break;
+
+    case COMM_GET_MCCONF:
+    case COMM_GET_MCCONF_DEFAULT: {
+        mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
+        if (!mcconf) break;
+        if (packet_id == COMM_GET_MCCONF) *mcconf = *mc_interface_get_configuration();
+        else confgenerator_set_defaults_mcconf(mcconf);
+        commands_send_mcconf(packet_id, mcconf, phandle);
+        vPortFree(mcconf);
+    } break;
+
+    case COMM_SET_APPCONF: {
+        app_configuration *cfg = app_get_configuration();
+        if (confgenerator_deserialize_appconf(data, cfg)) {
+            conf_general_store_app_configuration(cfg);
+            app_set_configuration(cfg);
+            int32_t ind = 0;
+            uint8_t send_buffer[PACKET_SIZE(8)];
+            uint8_t *buffer = send_buffer + PACKET_HEADER;
+            buffer[ind++] = packet_id;
+            reply_func(send_buffer, ind, phandle);
+        }
+    } break;
+
+    case COMM_GET_APPCONF:
+    case COMM_GET_APPCONF_DEFAULT: {
+        app_configuration *cfg = pvPortMalloc(sizeof(app_configuration));
+        if (!cfg) break;
+        if (packet_id == COMM_GET_APPCONF) *cfg = *app_get_configuration();
+        else confgenerator_set_defaults_appconf(cfg);
+        commands_send_appconf(packet_id, cfg, phandle);
+        vPortFree(cfg);
+    } break;
+
+    case COMM_GET_DECODED_ADC: {
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(24)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_GET_DECODED_ADC;
+        buffer_append_int32(buffer, (int32_t)(app_adc_get_decoded_level() * 1000000.0f), &ind);
+        buffer_append_int32(buffer, (int32_t)(VescToSTM_get_ADC1() * 1000000.0f), &ind);
+        buffer_append_int32(buffer, (int32_t)(app_adc_get_decoded_level2() * 1000000.0f), &ind);
+        buffer_append_int32(buffer, (int32_t)(VescToSTM_get_ADC2() * 1000000.0f), &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_DETECT_MOTOR_PARAM:
+    case COMM_DETECT_MOTOR_R_L: {
+        float r = 0.0f, l = 1.0f;
+        tune_foc_measure_res_ind(&r, &l);
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_DETECT_MOTOR_R_L;
+        buffer_append_float32(buffer, r, 1e6, &ind);
+        buffer_append_float32(buffer, l, 1e3, &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP: {
+        int32_t ind = 0;
+        float current = buffer_get_float32(data, 1e3, &ind);
+        float erpm_per_sec = buffer_get_float32(data, 1e3, &ind);
+        float duty = buffer_get_float32(data, 1e3, &ind);
+        float resistance = buffer_get_float32(data, 1e6, &ind);
+        float inductance = 0.0f;
+        if (len >= (unsigned int)ind + 4u) inductance = buffer_get_float32(data, 1e8, &ind);
+        float linkage = 0.0f, undriven = 0.0f, samples_n = 0.0f;
+        bool ok = tune_foc_measure_flux_linkage_openloop(current, duty, erpm_per_sec,
+                resistance, inductance, &linkage, &undriven, &samples_n);
+        if (samples_n > 60.0f) linkage = undriven;
+        if (!ok) linkage = 0.0f;
+        ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
+        buffer_append_float32(buffer, linkage, 1e7, &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_PING_CAN: {
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(8)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_PING_CAN;
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_ALIVE:
+        VescToSTM_timeout_reset();
+        break;
+    case COMM_REBOOT:
+        NVIC_SystemReset();
+        break;
+    default:
+        break;
+    }
+}
+#endif
+
+
+
 
 void commands_process_packet(unsigned char *data, unsigned int len,
 		void(*reply_func)(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle), PACKET_STATE_t * phandle) {
+#ifdef G30P
+	commands_process_packet_g30(data, len, reply_func, phandle);
+	return;
+#endif
 
 	if (!len) {
 		return;
