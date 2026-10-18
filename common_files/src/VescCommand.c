@@ -243,7 +243,7 @@ void send_position(PACKET_STATE_t * phandle){
  * targets, but this fast path is the only reachable implementation on G30P.
  * It keeps the VESC Tool configuration wire format and the motor-control
  * commands needed for setup/telemetry while allowing unused command families
- * to be garbage-collected from the 50 KiB SHU application.
+ * to be garbage-collected from the compact G30 SHU application.
  */
 static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         void(*reply_func)(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle),
@@ -407,10 +407,72 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     } break;
 
     /*
-     * Automatic R/L/flux detection is omitted from the compact G30 SHU image.
-     * VESC Tool still reads/writes foc_motor_r, foc_motor_l and
-     * foc_motor_flux_linkage through the normal MCCONF serialization.
+     * G30 FOC detection. Keep it deliberately conservative: the normal VESC Tool
+     * Detect FOC page uses COMM_DETECT_MOTOR_R_L followed by
+     * COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP.
      */
+    case COMM_DETECT_MOTOR_R_L: {
+        float r = 0.0f, l = 0.0f;
+        float old_max = mc_conf.l_current_max;
+        float safe_max = fabsf(old_max);
+        if (safe_max > 2.0f) safe_max = 2.0f;
+        if (safe_max < 0.25f) safe_max = 0.25f;
+        mc_conf.l_current_max = safe_max;
+        bool ok = tune_foc_measure_res_ind(&r, &l);
+        mc_conf.l_current_max = old_max;
+        if (!ok || !isfinite(r) || !isfinite(l) || r <= 0.0f || l <= 0.0f) {
+            r = 0.0f; l = 0.0f;
+        }
+        int32_t ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_DETECT_MOTOR_R_L;
+        buffer_append_float32(buffer, r, 1e6f, &ind);
+        buffer_append_float32(buffer, l, 1e3f, &ind);
+        buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
+    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP: {
+        int32_t ind = 0;
+        float current = buffer_get_float32(data, 1e3f, &ind);
+        float erpm_per_sec = buffer_get_float32(data, 1e3f, &ind);
+        float duty = buffer_get_float32(data, 1e3f, &ind);
+        float resistance = buffer_get_float32(data, 1e6f, &ind);
+        float inductance = 0.0f;
+        if (len >= (uint32_t)ind + 4u) {
+            inductance = buffer_get_float32(data, 1e8f, &ind);
+        }
+
+        if (current < 0.0f) current = -current;
+        if (current > 2.0f) current = 2.0f;
+        if (duty < 0.03f) duty = 0.03f;
+        if (duty > 0.15f) duty = 0.15f;
+        if (erpm_per_sec < 100.0f) erpm_per_sec = 100.0f;
+        if (erpm_per_sec > 1200.0f) erpm_per_sec = 1200.0f;
+
+        float linkage = 0.0f, linkage_undriven = 0.0f, undriven_samples = 0.0f;
+        bool ok = tune_foc_measure_flux_linkage_openloop(current, duty,
+                erpm_per_sec, resistance, inductance,
+                &linkage, &linkage_undriven, &undriven_samples);
+
+        /*
+         * XBOT/G30 phase-voltage scaling was hardware-correlated against the
+         * dedicated coast-BEMF channels in the v0.4.0 parameter-detect milestone.
+         * The upstream SmartESC Vq path reads about one half of coast-BEMF flux,
+         * so compensate that known scaling here.
+         */
+        if (ok && isfinite(linkage) && linkage > 0.0f) linkage *= 2.0f;
+        else linkage = 0.0f;
+
+        ind = 0;
+        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
+        buffer_append_float32(buffer, linkage, 1e7f, &ind);
+        reply_func(send_buffer, ind, phandle);
+    } break;
+
     case COMM_PING_CAN: {
         int32_t ind = 0;
         uint8_t send_buffer[PACKET_SIZE(8)];
