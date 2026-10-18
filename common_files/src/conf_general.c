@@ -38,6 +38,9 @@
 #include "mcconf_default.h"
 #include <string.h>
 #include "main.h"
+#ifdef G30P
+#include "g30_sensorless.h"
+#endif
 
 mc_configuration mc_conf;
 app_configuration appconf;
@@ -338,6 +341,11 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 void conf_general_setup_mc(mc_configuration *mcconf) {
 
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
+#ifdef G30P
+	G30SL_Configure(&G30Sensorless_M1, mcconf->foc_motor_r, mcconf->foc_motor_l,
+				  mcconf->foc_motor_flux_linkage, mcconf->si_wheel_diameter,
+				  mcconf->si_gear_ratio, mcconf->si_motor_poles, (uint32_t)mcconf->foc_f_sw);
+#endif
 
 	float current_max = mcconf->l_current_max * CURRENT_FACTOR_A * mcconf->l_current_max_scale;
 	float current_min = mcconf->l_current_min * CURRENT_FACTOR_A * mcconf->l_current_min_scale;
