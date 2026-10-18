@@ -406,40 +406,11 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         reply_func(send_buffer, ind, phandle);
     } break;
 
-    case COMM_DETECT_MOTOR_PARAM:
-    case COMM_DETECT_MOTOR_R_L: {
-        float r = 0.0f, l = 1.0f;
-        tune_foc_measure_res_ind(&r, &l);
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(20)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_DETECT_MOTOR_R_L;
-        buffer_append_float32(buffer, r, 1e6, &ind);
-        buffer_append_float32(buffer, l, 1e3, &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
-    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP: {
-        int32_t ind = 0;
-        float current = buffer_get_float32(data, 1e3, &ind);
-        float erpm_per_sec = buffer_get_float32(data, 1e3, &ind);
-        float duty = buffer_get_float32(data, 1e3, &ind);
-        float resistance = buffer_get_float32(data, 1e6, &ind);
-        float inductance = 0.0f;
-        if (len >= (unsigned int)ind + 4u) inductance = buffer_get_float32(data, 1e8, &ind);
-        float linkage = 0.0f, undriven = 0.0f, samples_n = 0.0f;
-        bool ok = tune_foc_measure_flux_linkage_openloop(current, duty, erpm_per_sec,
-                resistance, inductance, &linkage, &undriven, &samples_n);
-        if (samples_n > 60.0f) linkage = undriven;
-        if (!ok) linkage = 0.0f;
-        ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(20)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
-        buffer_append_float32(buffer, linkage, 1e7, &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
+    /*
+     * Automatic R/L/flux detection is omitted from the compact G30 SHU image.
+     * VESC Tool still reads/writes foc_motor_r, foc_motor_l and
+     * foc_motor_flux_linkage through the normal MCCONF serialization.
+     */
     case COMM_PING_CAN: {
         int32_t ind = 0;
         uint8_t send_buffer[PACKET_SIZE(8)];
