@@ -7,6 +7,17 @@ This fork is now focused on the G30 sensorless branch. The old M365 target, old 
 > **Status: active hardware-development build.**
 > The sensorless startup and motor-parameter detection are based on hardware-validated XBOT/G30 work, but this exact v0.8.7 integration still needs the current 24 V bench validation before road use.
 
+## Download / flash
+
+Current v0.8.7 files live under [`firmware/v0.8.7/`](firmware/v0.8.7/):
+
+- [SHU ZIP](firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip)
+- [IAP Driver.bin](firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin)
+- [Flash / recovery / stock-restore guide](firmware/v0.8.7/FLASH_AND_RESTORE.md)
+- [SHA-256 checksums](firmware/v0.8.7/SHA256SUMS.txt)
+
+The SHU ZIP is for the stock-compatible ScooterHacking flash path. The IAP Driver.bin is the encrypted `FIRM.bin.enc` payload for direct IAP / RemoteLab / 3-second recovery.
+
 ## Current firmware
 
 **SmartESC G30 NativeDash v0.8.7**
