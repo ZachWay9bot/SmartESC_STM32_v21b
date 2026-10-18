@@ -23,7 +23,7 @@ import zipfile
 from pathlib import Path
 
 APP_BASE = 0x08001000
-APP_LIMIT = 0x0800E000
+APP_LIMIT = 0x0800E800
 MAX_APP_SIZE = APP_LIMIT - APP_BASE
 
 DEFAULT_KEY = bytes([
