@@ -61,8 +61,8 @@
 #define MOT_TMR_MHZ 64
 #define HEAP_SIZE_KB 14
 #define CPU_MHZ  (64*1000000)
-#define APP_PAGE				56
-#define CONF_PAGE				57
+#define APP_PAGE				113
+#define CONF_PAGE				114
 #define PAGE_SIZE				0x400
 
 #endif
