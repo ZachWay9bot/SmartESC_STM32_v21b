@@ -477,7 +477,7 @@
 
 // Setup Info
 #ifndef MCCONF_SI_MOTOR_POLES
-#define MCCONF_SI_MOTOR_POLES			14 // Motor pole count
+#define MCCONF_SI_MOTOR_POLES			30 // Total motor poles (15 pole pairs), VESC semantics
 #endif
 #ifndef MCCONF_SI_GEAR_RATIO
 #define MCCONF_SI_GEAR_RATIO			1 // Gear ratio
