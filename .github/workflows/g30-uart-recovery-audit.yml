@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Regression: early recovery and IAP safety
+      - name: "Regression: early recovery and IAP safety"
         run: python3 tools/recovery/test_release_qualification.py
       - name: Verify RELEASE is blocked by default
         shell: bash
