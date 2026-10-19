@@ -312,9 +312,18 @@ void VescToSTM_handle_timeout(){
 		VescToSTM_timeout_reset();
 	}
 	if(appconf.timeout_msec){
+		/* FreeRTOS runs at 2 kHz, so timeout_msec * 2 is milliseconds -> ticks. */
 		if((xTaskGetTickCount() - last_reset) > (appconf.timeout_msec*2)){
-			VescToSTM_set_brake(appconf.timeout_brake_current*1000);
 			app_adc_stop_output();
+			if (appconf.timeout_brake_current > 0.0f) {
+				VescToSTM_set_brake(appconf.timeout_brake_current * 1000.0f);
+			} else {
+				/* G30 fail-safe default: no live command means no energized bridge. */
+				VescToSTM_set_current(0.0f, 0.0f);
+#ifdef G30P
+				VescToSTM_pwm_stop();
+#endif
+			}
 			last_reset = xTaskGetTickCount();
 			timeout_triggerd = true;
 		}
