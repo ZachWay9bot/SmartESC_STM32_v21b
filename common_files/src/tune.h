@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+extern volatile bool tune_abort_requested;
+
 bool tune_mcpwm_foc_hall_detect(float current, uint8_t *hall_table);
 float tune_foc_measure_resistance(float current, int samples);
 float tune_foc_measure_inductance(float voltage, float * used_current, uint32_t samples);
