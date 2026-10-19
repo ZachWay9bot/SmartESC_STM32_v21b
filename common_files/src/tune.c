@@ -17,6 +17,8 @@
 #include "hall_speed_pos_fdbk.h"
 #include "qfplib.h"
 
+volatile bool tune_abort_requested = false;
+
 
 /**
  * Run the motor in open loop and figure out at which angles the hall sensors are.
@@ -89,6 +91,7 @@ bool tune_mcpwm_foc_hall_detect(float current, uint8_t *hall_table) {
 	}
 	//HALL_M1.PhaseShift = old_phase_shift;
 	VescToSTM_enable_timeout(true);
+g30_detect_cleanup:
 #ifdef G30P
 	/* Detection must leave the G30 bridge positively off on every exit path. */
 	VescToSTM_pwm_force(false, false);
@@ -274,18 +277,14 @@ float tune_foc_measure_inductance(float voltage, float * used_current, uint32_t 
  */
 float tune_foc_measure_inductance_current(float curr_goal, int samples) {
 	float duty_last = 0.0;
-	for (float i = 0.2;i < 10.0;i *= 1.5) {
+	for (float i = 0.2;i < 10.0 && !tune_abort_requested;i *= 1.5) {
 		float i_tmp;
 		tune_foc_measure_inductance(i, &i_tmp, 10);
-
 		duty_last = i;
-		if (i_tmp >= curr_goal) {
-			break;
-		}
+		if (i_tmp >= curr_goal) break;
 	}
-
-	float ind = tune_foc_measure_inductance(duty_last, NULL, samples);
-	return ind;
+	if (tune_abort_requested) return 0.0f;
+	return tune_foc_measure_inductance(duty_last, NULL, samples);
 }
 
 /**
@@ -304,9 +303,9 @@ bool tune_foc_measure_res_ind(float *res, float *ind) {
 	float current = mc_conf.l_current_max / 2.0;
 
 	*res = tune_foc_measure_resistance(current, 3000);
+	if (tune_abort_requested) return false;
 	*ind = tune_foc_measure_inductance_current(current, 100);
-
-	return true;
+	return !tune_abort_requested;
 }
 
 
@@ -340,6 +339,7 @@ bool tune_foc_measure_res_ind(float *res, float *ind) {
 bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 		float erpm_per_sec, float res, float ind, float *linkage,
 		float *linkage_undriven, float *undriven_samples) {
+	if (tune_abort_requested) return false;
 	VescToSTM_pwm_force(true, true);
 	bool result = false;
 
@@ -356,17 +356,18 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 
 	float duty_still = 0;
 	float samples = 0;
-	for (int i = 0;i < 1000;i++) {
+	for (int i = 0;i < 1000 && !tune_abort_requested;i++) {
 		duty_still += fabsf(VescToSTM_get_duty_cycle_now_fast());
 		samples += 1.0;
 		vTaskDelay(MS_TO_TICKS(1));
 	}
 
+	if (tune_abort_requested || samples == 0.0f) goto g30_detect_cleanup;
 	duty_still /= samples;
 	float duty_max = 0.0;
 	const int max_time = 15000;
 
-	while (fabsf(VescToSTM_get_duty_cycle_now_fast()) < duty) {
+	while (!tune_abort_requested && fabsf(VescToSTM_get_duty_cycle_now_fast()) < duty) {
 		erpm_now += erpm_per_sec / 1000.0;
 		VescToSTM_set_open_loop_erpm(erpm_now);
 
@@ -401,7 +402,9 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 		}
 	}
 
+	if (tune_abort_requested) goto g30_detect_cleanup;
 	vTaskDelay(2000);
+	if (tune_abort_requested) goto g30_detect_cleanup;
 
 	if (cnt < max_time) {
 		float vq_avg = 0.0;
@@ -410,7 +413,7 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 		float id_avg = 0.0;
 		float samples2 = 0.0;
 
-		for (int i = 0;i < 10000;i++) {
+		for (int i = 0;i < 10000 && !tune_abort_requested;i++) {
 			vq_avg += VescToSTM_get_Vq();
 			vd_avg += VescToSTM_get_Vd();
 			iq_avg += VescToSTM_get_iq();
@@ -419,6 +422,7 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 			vTaskDelay(1);
 		}
 
+		if (tune_abort_requested || samples2 == 0.0f) goto g30_detect_cleanup;
 		vq_avg /= samples2;
 		vd_avg /= samples2;
 		iq_avg /= samples2;
