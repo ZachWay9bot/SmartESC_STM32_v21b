@@ -27,6 +27,7 @@
 #include "packet.h"
 #include <string.h>
 #include "FreeRTOS.h"
+#include "task.h"
 #include "confgenerator.h"
 #include <math.h>
 #include "utils.h"
@@ -268,6 +269,56 @@ static bool g30_detect_flux(float r, float l_h, float *flux) {
     return true;
 }
 
+static volatile bool g30_detect_active;
+static void (*g30_detect_reply)(unsigned char*, unsigned int, PACKET_STATE_t*);
+static PACKET_STATE_t *g30_detect_phandle;
+
+static void g30_detect_worker(void *arg) {
+    (void)arg;
+    float r = 0.0f, l_h = 0.0f, flux = 0.0f;
+    int16_t res = -100;
+
+    if (!tune_abort_requested && g30_detect_rl(&r, &l_h)) {
+        if (tune_abort_requested) {
+            res = -11;
+        } else if (g30_detect_flux(r, l_h, &flux)) {
+            if (tune_abort_requested) {
+                res = -11;
+            } else {
+                mc_configuration *cfg = mc_interface_get_configuration();
+                cfg->foc_motor_r = r;
+                cfg->foc_motor_l = l_h;
+                cfg->foc_motor_flux_linkage = flux;
+                cfg->foc_current_kp = l_h * 1000.0f;
+                cfg->foc_current_ki = r * 1000.0f;
+                cfg->foc_observer_gain = 1000.0f / (flux * flux);
+                conf_general_setup_mc(cfg);
+                if (conf_general_store_mc_configuration(cfg, false)) {
+                    commands_send_mcconf(COMM_GET_MCCONF, cfg, g30_detect_phandle);
+                    res = 0;
+                }
+            }
+        } else if (tune_abort_requested) {
+            res = -11;
+        } else {
+            res = -10;
+        }
+    } else if (tune_abort_requested) {
+        res = -11;
+    }
+
+    uint8_t send_buffer[PACKET_SIZE(4)];
+    uint8_t *buffer = send_buffer + PACKET_HEADER;
+    int32_t ind = 0;
+    buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
+    buffer_append_int16(buffer, res, &ind);
+    g30_detect_reply(send_buffer, ind, g30_detect_phandle);
+
+    tune_abort_requested = false;
+    g30_detect_active = false;
+    vTaskDelete(NULL);
+}
+
 /*
  * Compact G30 dispatcher. The full upstream dispatcher remains below for other
  * targets, but this fast path is the only reachable implementation on G30P.
@@ -284,6 +335,10 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     data++;
     len--;
     send_func = reply_func;
+
+    if (g30_detect_active &&
+        packet_id != COMM_ALIVE &&
+        packet_id != COMM_APP_DISABLE_OUTPUT) return;
 
     switch (packet_id) {
     case COMM_FW_VERSION: {
@@ -348,19 +403,9 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         reply_func(send_buffer, ind, phandle);
     } break;
 
-    case COMM_SET_DUTY: {
-        int32_t ind = 0;
-        VescToSTM_set_current_rel((float)buffer_get_int32(data, &ind) / 100000.0f);
-        VescToSTM_timeout_reset();
-    } break;
     case COMM_SET_CURRENT: {
         int32_t ind = 0;
         VescToSTM_set_torque(buffer_get_int32(data, &ind));
-        VescToSTM_timeout_reset();
-    } break;
-    case COMM_SET_CURRENT_REL: {
-        int32_t ind = 0;
-        VescToSTM_set_current_rel(buffer_get_float32(data, 1e5, &ind));
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_CURRENT_BRAKE: {
@@ -402,37 +447,31 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * working, while the apply-all command below drives the same measurement
      * path for VESC Tool's one-click detector.
      */
-    case COMM_DETECT_APPLY_ALL_FOC: {
-        float r = 0.0f, l_h = 0.0f, flux = 0.0f;
-        int16_t res = -100;
-        if (g30_detect_rl(&r, &l_h)) {
-            if (g30_detect_flux(r, l_h, &flux)) {
-                mc_configuration *cfg = mc_interface_get_configuration();
-                cfg->foc_motor_r = r;
-                cfg->foc_motor_l = l_h;
-                cfg->foc_motor_flux_linkage = flux;
-                /* Same 1 ms current-controller target used by VESC detection. */
-                cfg->foc_current_kp = l_h * 1000.0f;
-                cfg->foc_current_ki = r * 1000.0f;
-                cfg->foc_observer_gain = 1000.0f / (flux * flux);
-                conf_general_setup_mc(cfg);
-                if (conf_general_store_mc_configuration(cfg, false)) {
-                    /* Utility::detectAllFoc expects the fresh MCConf before result. */
-                    commands_send_mcconf(COMM_GET_MCCONF, cfg, phandle);
-                    res = 0;
-                }
-            } else {
-                res = -10; /* VESC Tool: flux linkage detection failed */
+    case COMM_DETECT_APPLY_ALL_FOC:
+        if (!g30_detect_active) {
+            tune_abort_requested = false;
+            g30_detect_reply = reply_func;
+            g30_detect_phandle = phandle;
+            g30_detect_active = true;
+            if (xTaskCreate(g30_detect_worker, "g30det", 320, NULL,
+                            tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
+                g30_detect_active = false;
+                tune_abort_requested = false;
+                uint8_t send_buffer[PACKET_SIZE(4)];
+                uint8_t *buffer = send_buffer + PACKET_HEADER;
+                int32_t ind = 0;
+                buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
+                buffer_append_int16(buffer, -100, &ind);
+                reply_func(send_buffer, ind, phandle);
             }
         }
+        break;
 
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(8)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
-        buffer_append_int16(buffer, res, &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
+    case COMM_APP_DISABLE_OUTPUT:
+        if (g30_detect_active) tune_abort_requested = true;
+        VescToSTM_set_current(0.0f, 0.0f);
+        VescToSTM_pwm_stop();
+        break;
 
     case COMM_ALIVE:
         VescToSTM_timeout_reset();
