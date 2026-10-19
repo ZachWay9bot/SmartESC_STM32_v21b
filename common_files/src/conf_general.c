@@ -345,6 +345,18 @@ void conf_general_setup_f_sw(uint32_t f_sw){
 
 void conf_general_setup_mc(mc_configuration *mcconf) {
 
+#ifdef G30P
+	/* VESC si_motor_poles is the total magnetic pole count. Older G30 builds
+	 * stored 14 here while simultaneously treating it as pole pairs in the
+	 * speed path. Migrate that legacy value and reject impossible odd/zero
+	 * pole counts before any ERPM/RPM/dashboard conversion uses it. */
+	if (mcconf->si_motor_poles == 14u ||
+		mcconf->si_motor_poles < 2u ||
+		(mcconf->si_motor_poles & 1u)) {
+		mcconf->si_motor_poles = 30u;
+	}
+#endif
+
 	conf_general_setup_f_sw(mcconf->foc_f_sw);
 #ifdef G30P
 	G30SL_Configure(&G30Sensorless_M1, mcconf->foc_motor_r, mcconf->foc_motor_l,
