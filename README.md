@@ -1,5 +1,6 @@
 # SmartESC G30 NativeDash v0.8.7
 
+> **SAFETY HOLD (20 October 2026): SmartESC v0.8.7 images below are historical development artifacts, NOT approved to flash on a sealed UART-only controller.** Its 3-second recovery is in the replaceable application, not an independent bootloader. The SHU packer now fails closed until board-specific full stock-restore evidence is supplied. See [recovery qualification](tools/recovery/RECOVERY_RELEASE_HOLD.md).\n\n
 Current primary target: **Ninebot MAX G30 / G30D 3-cap STM32F103 ESC**.
 
 This fork is now focused on the G30 sensorless branch. The old M365 target, old ESP32 serial-throttle experiment and historical reference documents are kept under `legacy/` so the repository root reflects the firmware that is actually being developed.

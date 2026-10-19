@@ -1,0 +1,27 @@
+name: G30 UART Recovery Anti-Lockout Audit
+on:
+  pull_request:
+    branches: [vesc_comp]
+  push:
+    branches: [vesc_comp]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  safe-recovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: "Regression: early recovery and IAP safety"
+        run: python3 tools/recovery/test_release_qualification.py
+      - name: Verify RELEASE is blocked by default
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 tools/recovery/release_qualification.py --release; then
+            echo "::error::Firmware authorized without full independent UART restore evidence"
+            exit 1
+          fi
+          echo "PASS: no flashable SHU without demonstrated hardware rescue"

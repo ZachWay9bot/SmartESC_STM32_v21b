@@ -1,5 +1,6 @@
 # Firmware builds
 
+> **DO NOT FLASH THESE HISTORICAL ARTIFACTS ON POTTED CONTROLLERS.** No independently verified serial restore exists for this exact SmartESC integration. All future SHU packaging is blocked pending test evidence.\n\n
 Current firmware: **SmartESC G30 NativeDash v0.8.7**
 
 The authoritative source is the default branch. GitHub Actions builds the G30 target and publishes BIN/ELF/MAP plus a ScooterHacking ZIPv3 package as workflow artifacts.
