@@ -89,9 +89,11 @@ void G30SL_Clear(G30Sensorless_Handle_t *h) {
 void G30SL_Configure(G30Sensorless_Handle_t *h, float r_ohm, float l_h, float flux_wb,
                      float wheel_diameter_m, float gear_ratio, uint8_t motor_poles,
                      uint32_t foc_hz) {
-    uint32_t r = (r_ohm >= 0.005f && r_ohm <= 5.0f) ? (uint32_t)(r_ohm * 1000.0f + 0.5f) : 0u;
-    uint32_t l = (l_h >= 0.000005f && l_h <= 0.02f) ? (uint32_t)(l_h * 1000000.0f + 0.5f) : 0u;
-    uint32_t f = (flux_wb >= 0.0005f && flux_wb <= 0.2f) ? (uint32_t)(flux_wb * 1000000.0f + 0.5f) : 0u;
+    /* Keep runtime acceptance aligned with G30 Detect-All. Values outside
+     * these ranges are treated as invalid and therefore cannot arm sensorless PWM. */
+    uint32_t r = (r_ohm >= 0.05f && r_ohm <= 2.5f) ? (uint32_t)(r_ohm * 1000.0f + 0.5f) : 0u;
+    uint32_t l = (l_h >= 0.00005f && l_h <= 0.003f) ? (uint32_t)(l_h * 1000000.0f + 0.5f) : 0u;
+    uint32_t f = (flux_wb >= 0.002f && flux_wb <= 0.04f) ? (uint32_t)(flux_wb * 1000000.0f + 0.5f) : 0u;
     g30sl_core_set_motor(&h->core, r, l, f);
     if (!r) h->core.cfg.r_mohm = 0u;
     if (!l) h->core.cfg.l_uh = 0u;
