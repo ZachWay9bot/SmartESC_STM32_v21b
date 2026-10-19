@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import struct
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -150,6 +151,20 @@ def main() -> int:
         help="displayName stored in info.json",
     )
     args = ap.parse_args()
+
+    # Fails closed. Merely compiling a firmware is never authorization to
+    # generate a flashable SHU/IAP package for a sealed MCU.
+    # Independent hardware recovery and EXACT stock restore are mandatory.
+    qualification = Path(__file__).resolve().parent / "recovery" / "release_qualification.py"
+    check = subprocess.run(
+        [sys.executable, str(qualification), "--release", "--image", str(args.firmware)],
+        capture_output=True, text=True, check=False,
+    )
+    if check.returncode != 0:
+        raise RuntimeError(
+            "FLASHABLE PACKAGE BLOCKED: independent UART stock-restore unverified.\n"
+            + check.stdout + check.stderr
+        )
 
     plain = args.firmware.read_bytes()
     sp, reset = validate_app_image(plain)
