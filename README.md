@@ -5,7 +5,7 @@ Current primary target: **Ninebot MAX G30 / G30D 3-cap STM32F103 ESC**.
 This fork is now focused on the G30 sensorless branch. The old M365 target, old ESP32 serial-throttle experiment and historical reference documents are kept under `legacy/` so the repository root reflects the firmware that is actually being developed.
 
 > **Status: active hardware-development build.**
-> The sensorless startup and motor-parameter detection are based on hardware-validated XBOT/G30 work, but this exact v0.8.7 integration still needs the current 24 V bench validation before road use.
+> The sensorless startup and motor-parameter detection are based on hardware-validated G30-identical/G30 work, but this exact v0.8.7 integration still needs the current 24 V bench validation before road use.
 
 ## Download / flash
 
@@ -121,7 +121,6 @@ Application-level recovery:
 
 - hold the power button for at least **3 seconds during power-up**
 - recovery UART: PB6/PB7, 115200
-- recovery identity: `XBOTRCV1V00001`
 - command family: `0x07 BEGIN -> 0x08 WRITE -> 0x09 FINALIZE -> 0x0A RESET`
 
 The application recovery cannot help if the application itself is completely unable to execute. The untouched stock bootloader remains the lower-level recovery boundary.
@@ -174,4 +173,4 @@ The `legacy/` tree is retained for archaeology and upstream history. It is not t
 
 ## Credits
 
-This repository is derived from SmartESC STM32 work and ST Motor Control SDK components, with additional G30/XBOT sensorless, VESC Tool, recovery and native dashboard integration in this fork. Existing upstream copyright/license notices remain with their respective source files.
+This repository is derived from SmartESC STM32 work and ST Motor Control SDK components, with additional G30-identical sensorless, VESC Tool, recovery and native dashboard integration in this fork. Existing upstream copyright/license notices remain with their respective source files.
