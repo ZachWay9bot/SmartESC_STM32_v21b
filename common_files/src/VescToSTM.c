@@ -22,6 +22,13 @@
 #endif
 
 static float tacho_scale;
+
+static inline uint8_t VescToSTM_motor_pole_pairs(void) {
+	uint8_t poles = mc_conf.si_motor_poles;
+	if (poles < 2u) poles = 2u;
+	return (uint8_t)(poles / 2u);
+}
+
 stm_state VescToSTM_mode;
 
 float adc_1;
@@ -154,12 +161,16 @@ int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 }
 
 int32_t VescToSTM_rpm_to_speed(int32_t rpm){
-	int32_t speed = ((rpm*SPEED_UNIT*mc_conf.si_motor_poles)/_RPM);
+	/* VESC si_motor_poles is total magnetic poles. ST speed units here are
+	 * electrical Hz * SPEED_UNIT, so mechanical RPM must use pole pairs. */
+	int32_t pole_pairs = VescToSTM_motor_pole_pairs();
+	int32_t speed = ((rpm * SPEED_UNIT * pole_pairs) / _RPM);
 	return speed;
 }
 
 int32_t VescToSTM_speed_to_rpm(int32_t speed){
-	int32_t rpm = (speed*60/10)/mc_conf.si_motor_poles;
+	int32_t pole_pairs = VescToSTM_motor_pole_pairs();
+	int32_t rpm = (speed * _RPM / SPEED_UNIT) / pole_pairs;
 	return rpm;
 }
 
@@ -632,7 +643,10 @@ void VescToSTM_start_motor(){
 
 
 void VescToSTM_init_odometer(mc_configuration* conf){
-	tacho_scale = (conf->si_wheel_diameter * 3.14159265359f) / (3.0f * conf->si_motor_poles * conf->si_gear_ratio);
+	/* Tachometer counts one 60 degree electrical sector. VESC stores total
+	 * motor poles, therefore 3 * total_poles == 6 * pole_pairs per mech rev. */
+	tacho_scale = (conf->si_wheel_diameter * 3.14159265359f) /
+				  (3.0f * conf->si_motor_poles * conf->si_gear_ratio);
 }
 
 /**
@@ -683,7 +697,10 @@ uint32_t VescToSTM_get_odometer(void) {
  * Speed, in m/s
  */
 float VescToSTM_get_speed(void) {
-	float temp = (((float)MCI_GetAvrgMecSpeedUnit(pMCI[M1]) / 10.0f) * mc_conf.si_wheel_diameter * 3.14159265359f) / mc_conf.si_gear_ratio / mc_conf.si_motor_poles;
+	float pole_pairs = (float)VescToSTM_motor_pole_pairs();
+	float temp = (((float)MCI_GetAvrgMecSpeedUnit(pMCI[M1]) / 10.0f) *
+				  mc_conf.si_wheel_diameter * 3.14159265359f) /
+				 mc_conf.si_gear_ratio / pole_pairs;
 	return temp * DIR_MUL;
 }
 
