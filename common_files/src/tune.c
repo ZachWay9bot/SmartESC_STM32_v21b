@@ -92,6 +92,8 @@ bool tune_mcpwm_foc_hall_detect(float current, uint8_t *hall_table) {
 	//HALL_M1.PhaseShift = old_phase_shift;
 	VescToSTM_enable_timeout(true);
 g30_detect_cleanup:
+	VescToSTM_set_current(0, 0);
+	VescToSTM_set_open_loop(false, 0, 0);
 #ifdef G30P
 	/* Detection must leave the G30 bridge positively off on every exit path. */
 	VescToSTM_pwm_force(false, false);
@@ -438,9 +440,6 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 			VescToSTM_set_open_loop_erpm(erpm_now);
 			vTaskDelay(MS_TO_TICKS(1));
 		}
-
-		VescToSTM_set_current(0, 0);
-		VescToSTM_set_open_loop(false, 0, 0);
 
 		*linkage_undriven = *linkage/2.0;
 
