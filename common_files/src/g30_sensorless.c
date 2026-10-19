@@ -129,7 +129,11 @@ void G30SL_PassivePoll(G30Sensorless_Handle_t *h) {
 
 bool G30SL_PreparePwmStart(G30Sensorless_Handle_t *h) {
     if (h->_Super.open_loop) return true;
-    if (!h->core.cfg.r_mohm || !h->core.cfg.l_uh || !h->core.cfg.lambda_uwb) return false;
+    /* Reject corrupt / wildly wrong motor parameters before road PWM can start.
+     * These are the same G30 bounds used by Detect All. */
+    if (h->core.cfg.r_mohm < 50u || h->core.cfg.r_mohm > 2500u ||
+        h->core.cfg.l_uh < 50u || h->core.cfg.l_uh > 3000u ||
+        h->core.cfg.lambda_uwb < 2000u || h->core.cfg.lambda_uwb > 40000u) return false;
     if (!g30sl_core_roll_ready(&h->core, DWT->CYCCNT)) return false;
     g30sl_core_seed_observer_from_roll(&h->core, 0, 0);
     if (!h->core.observer_seeded) return false;
