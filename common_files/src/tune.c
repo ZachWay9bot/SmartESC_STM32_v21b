@@ -435,15 +435,16 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 			vTaskDelay(MS_TO_TICKS(1));
 		}
 
-		VescToSTM_set_current(0, 0);
-		VescToSTM_set_open_loop(false, 0, 0);
-
 		*linkage_undriven = *linkage/2.0;
 
 		result = true;
 	}
+
+	/* Every exit path, including timeout/stall/error, must clear the driven
+	 * open-loop state before the bridge is forced off. */
+	VescToSTM_set_current(0, 0);
+	VescToSTM_set_open_loop(false, 0, 0);
 #ifdef G30P
-	/* Detection must leave the G30 bridge positively off on every exit path. */
 	VescToSTM_pwm_force(false, false);
 #else
 	VescToSTM_pwm_force(false, true);
