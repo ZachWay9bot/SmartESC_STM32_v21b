@@ -402,35 +402,6 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * working, while the apply-all command below drives the same measurement
      * path for VESC Tool's one-click detector.
      */
-    case COMM_DETECT_MOTOR_R_L: {
-        float r = 0.0f, l_h = 0.0f;
-        if (!g30_detect_rl(&r, &l_h)) { r = 0.0f; l_h = 0.0f; }
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(16)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_DETECT_MOTOR_R_L;
-        buffer_append_float32(buffer, r, 1e6f, &ind);
-        buffer_append_float32(buffer, l_h * 1e6f, 1e3f, &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
-    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP: {
-        int32_t ri = 0;
-        (void)buffer_get_float32(data, 1e3f, &ri);
-        (void)buffer_get_float32(data, 1e3f, &ri);
-        (void)buffer_get_float32(data, 1e3f, &ri);
-        float r = buffer_get_float32(data, 1e6f, &ri);
-        float l_h = len >= (uint32_t)ri + 4u ? buffer_get_float32(data, 1e8f, &ri) : mc_conf.foc_motor_l;
-        float flux = 0.0f;
-        (void)g30_detect_flux(r, l_h, &flux);
-        int32_t ind = 0;
-        uint8_t send_buffer[PACKET_SIZE(12)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
-        buffer_append_float32(buffer, flux, 1e7f, &ind);
-        reply_func(send_buffer, ind, phandle);
-    } break;
-
     case COMM_DETECT_APPLY_ALL_FOC: {
         float r = 0.0f, l_h = 0.0f, flux = 0.0f;
         int16_t res = -100;
