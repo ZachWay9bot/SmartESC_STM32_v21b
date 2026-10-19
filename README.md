@@ -5,7 +5,7 @@ Current primary target: **Ninebot MAX G30 / G30D 3-cap STM32F103 ESC**.
 This fork is now focused on the G30 sensorless branch. The old M365 target, old ESP32 serial-throttle experiment and historical reference documents are kept under `legacy/` so the repository root reflects the firmware that is actually being developed.
 
 > **Status: active hardware-development build.**
-> The sensorless startup and motor-parameter detection are based on hardware-validated G30-identical/G30 work, but this exact v0.8.7 integration still needs the current 24 V bench validation before road use.
+> The sensorless startup and motor-parameter detection are based on hardware-validated G30-identical/G30 work, but this exact v0.8.7 integration still needs validation on a current-limited lab PSU before road use.
 
 ## Download / flash
 
@@ -165,7 +165,7 @@ The `legacy/` tree is retained for archaeology and upstream history. It is not t
 
 ## Current development priorities
 
-1. validate v0.8.7 Detect All on the current 24 V hardware setup
+1. validate v0.8.7 Detect All on a current-limited lab PSU setup
 2. verify Gen1 and Gen2 motor detection ranges
 3. validate native dashboard throttle/brake plus speed/battery display on hardware
 4. audit pole-count semantics before high-speed/road qualification
