@@ -154,6 +154,11 @@ def main() -> int:
     plain = args.firmware.read_bytes()
     sp, reset = validate_app_image(plain)
     encrypted = ninebot_tea_encrypt(plain)
+    if len(encrypted) > MAX_APP_SIZE:
+        raise ValueError(
+            f"encrypted IAP image is {len(encrypted)} bytes, but stock staging "
+            f"allows at most {MAX_APP_SIZE} bytes; reduce application size"
+        )
 
     info = {
         "schemaVersion": 1,
