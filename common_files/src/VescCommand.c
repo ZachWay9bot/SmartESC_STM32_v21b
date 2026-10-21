@@ -417,7 +417,13 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_MCCONF: {
-        if (len < 4u) break; /* signature is mandatory; full length audit remains open */
+        /*
+         * MCCONF v6.06 decoder has no length argument. Its generated wire
+         * format is exactly 484 bytes (including signature/reserved fields).
+         * Reject incomplete or oversized packets BEFORE decoding/writing.
+         */
+        enum { G30_MCCONF_WIRE_BYTES = 484 };
+        if (len != G30_MCCONF_WIRE_BYTES) break;
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
         *mcconf = *mc_interface_get_configuration();
