@@ -43,7 +43,8 @@ int main(void) {
     if (feed(lever, sizeof lever, &f) != 0) return 2;
 
     /* CMD64 request -> existing CMD64 response [mode,bat,light,beep,speed,fault]. */
-    uint8_t request[] = {0x5A,0xA5,0x03,0x21,0x20,0x64,0x00,0x00,0x00};
+    uint8_t request[] = {0x5A,0xA5,0x03,0x21,0x20,0x64,0x00,
+                         0x00,0x00,0x00,0x00,0x00};
     addCRC(request, sizeof request);
     if (feed(request, sizeof request, &f) != 1 ||
         f.cmd != 0x64 || f.src != 0x21 || f.dst != 0x20) return 3;
