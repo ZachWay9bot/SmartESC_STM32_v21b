@@ -430,12 +430,15 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         if (confgenerator_deserialize_mcconf(data, mcconf)) {
             conf_general_mcconf_hw_limits(mcconf);
             conf_general_setup_mc(mcconf);
-            conf_general_store_mc_configuration(mcconf, 0);
-            int32_t ind = 0;
-            uint8_t send_buffer[PACKET_SIZE(8)];
-            uint8_t *buffer = send_buffer + PACKET_HEADER;
-            buffer[ind++] = packet_id;
-            reply_func(send_buffer, ind, phandle);
+            /* Do not acknowledge an unsuccessful settings write as success.
+             * The flash writer and its address/layout remain unchanged. */
+            if (conf_general_store_mc_configuration(mcconf, 0)) {
+                int32_t ind = 0;
+                uint8_t send_buffer[PACKET_SIZE(8)];
+                uint8_t *buffer = send_buffer + PACKET_HEADER;
+                buffer[ind++] = packet_id;
+                reply_func(send_buffer, ind, phandle);
+            }
         }
         vPortFree(mcconf);
     } break;
