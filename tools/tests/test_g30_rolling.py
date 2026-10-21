@@ -141,6 +141,19 @@ class G30Rolling(unittest.TestCase):
                     "adc1_read_regular_12b(9u)"):
             self.assertIn(pin, SENSOR)
 
+    def test_sensorless_uses_actual_foc_execution_frequency(self):
+        # FOC runs at f_sw/2 above 20 kHz, per conf_general_setup_f_sw().
+        setup = (ROOT / "common_files/src/conf_general.c").read_text()
+        self.assertIn("uint32_t regulation_exec_rate = (f_sw > 20000) ? 2 : 1;", setup)
+        self.assertIn("G30Sensorless_M1._Super.hMeasurementFrequency", setup)
+        self.assertIn("uint32_t hf = h->_Super.hMeasurementFrequency;", SENSOR)
+        self.assertIn("h->observer_div = (uint16_t)(hf / h->core.cfg.observer_hz);", SENSOR)
+        self.assertLess(SENSOR.index("uint32_t hf = h->_Super.hMeasurementFrequency;"),
+                        SENSOR.index("h->observer_div = (uint16_t)(hf / h->core.cfg.observer_hz);"))
+        # Diagnostic examples, not a request to change PWM frequency.
+        self.assertEqual((16000 // 1, 24000 // 2, 32000 // 2),
+                         (16000, 12000, 16000))
+
     def test_three_kmh_threshold_matches_poles_not_serial_prefix(self):
         for poles, expected_su in ((12, 65), (18, 98), (30, 164)):
             ehz = (3.0 / 3.6) / (math.pi * 0.243) * (poles / 2)
