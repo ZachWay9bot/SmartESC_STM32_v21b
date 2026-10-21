@@ -119,7 +119,7 @@ class G30FOCContract(unittest.TestCase):
         self.assertLess(core.index("MCM_Rev_Park("), core.index("G30SL_ObserverStep("))
 
     def test_stock_dash_brake_is_prioritized_over_throttle(self):
-        callback = function_body(DASH, "void vTimerCallback(")
+        callback = function_body(DASH, "void vTimerCallback( TimerHandle_t xTimer ){")
         self.assertIn("case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC:", callback)
         case = callback.rsplit("case ADC_CTRL_TYPE_CURRENT_NOREV_BRAKE_ADC:", 1)[1]
         case = case.split("break;", 1)[0]
