@@ -66,6 +66,9 @@ class G30FOCContract(unittest.TestCase):
                         setter.index("confgenerator_deserialize_mcconf(data, mcconf)"))
         self.assertLess(setter.index("confgenerator_deserialize_mcconf(data, mcconf)"),
                         setter.index("conf_general_store_mc_configuration(mcconf, 0)"))
+        self.assertIn("if (conf_general_store_mc_configuration(mcconf, 0)) {", setter)
+        self.assertLess(setter.index("if (conf_general_store_mc_configuration(mcconf, 0)) {"),
+                        setter.index("reply_func(send_buffer, ind, phandle);"))
 
     def test_phase_current_reconstruction_covers_all_three(self):
         getter = function_body(DRIVER, "__weak void R3_2_GetPhaseCurrents(")
