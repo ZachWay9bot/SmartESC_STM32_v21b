@@ -447,6 +447,48 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         vPortFree(mcconf);
     } break;
 
+    case COMM_SET_APPCONF: {
+        /*
+         * Generated APPCONF v6.06 wire format is 476 bytes, including its
+         * signature and reserved fields. The legacy decoder has no length
+         * argument, so only call it after validating the COMPLETE payload.
+         * This size is cross-checked against the serializer by a source test.
+         */
+        enum { G30_APPCONF_WIRE_BYTES = 476 };
+        if (len != G30_APPCONF_WIRE_BYTES) break;
+
+        app_configuration *new_conf = pvPortMalloc(sizeof(app_configuration));
+        if (!new_conf) break;
+        const app_configuration *active = app_get_configuration();
+        *new_conf = *active; /* preserve fields omitted by wire format */
+
+        if (confgenerator_deserialize_appconf(data, new_conf) &&
+            /* VESC Tool must not disconnect the fixed stock dash input. */
+            new_conf->app_to_use == active->app_to_use &&
+            new_conf->app_adc_conf.ctrl_type == active->app_adc_conf.ctrl_type &&
+            new_conf->app_uart_baudrate == active->app_uart_baudrate &&
+            new_conf->shutdown_mode == active->shutdown_mode &&
+            new_conf->app_adc_conf.update_rate_hz >= 1u &&
+            new_conf->app_adc_conf.update_rate_hz <= 200u &&
+            isfinite(new_conf->timeout_brake_current) &&
+            isfinite(new_conf->app_adc_conf.voltage_start) &&
+            isfinite(new_conf->app_adc_conf.voltage_end) &&
+            isfinite(new_conf->app_adc_conf.voltage2_start) &&
+            isfinite(new_conf->app_adc_conf.voltage2_end) &&
+            new_conf->app_adc_conf.voltage_end >
+                new_conf->app_adc_conf.voltage_start &&
+            new_conf->app_adc_conf.voltage2_end >
+                new_conf->app_adc_conf.voltage2_start) {
+            if (conf_general_store_app_configuration(new_conf)) {
+                app_set_configuration(new_conf);
+                uint8_t send_buffer[PACKET_SIZE(1)];
+                send_buffer[PACKET_HEADER] = COMM_SET_APPCONF;
+                reply_func(send_buffer, 1u, phandle);
+            }
+        }
+        vPortFree(new_conf);
+    } break;
+
     case COMM_GET_APPCONF:
     case COMM_GET_APPCONF_DEFAULT: {
         app_configuration *conf = pvPortMalloc(sizeof(app_configuration));
