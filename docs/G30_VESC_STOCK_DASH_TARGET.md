@@ -28,3 +28,10 @@ Use original VESC firmware behavior as the functional reference for motor contro
 
 ## Not assumed
 No claim of full stock dashboard ACK coverage, no claim of full VESC Tool parity, no claim of a hardware-tested new firmware. The current source indicates CMD64 status response, but exact stock ACK requirements need captured traffic before changing behavior.
+
+## Implemented in development branch (2026-10-21, unbuilt)
+- Compact G30 VESC dispatcher now replies to `COMM_GET_MCCONF_DEFAULT`, `COMM_GET_APPCONF`, `COMM_GET_APPCONF_DEFAULT` using existing upstream serialization and defaults.
+- Added minimum length checks before reading 4-byte `COMM_SET_CURRENT` / `COMM_SET_CURRENT_BRAKE` and `COMM_GET_VALUES_SELECTIVE` data and the 4-byte `COMM_SET_MCCONF` signature. **This does not make deserialization fully bounded.**
+- `COMM_SET_APPCONF` is *not* implemented in G30 compact dispatch yet: existing `confgenerator_deserialize_appconf()` has no input length and writing full app settings needs dashboard-control preservation and packet-bound checks before use.
+- Stock dashboard parser, status response, CMD64 timing/ACK, IAP, bootloader, recovery and motor control remain **unchanged**.
+- No CI build or bench validation performed for these changes. There must be no candidate flash image until compile/link and regression tests have passed.
