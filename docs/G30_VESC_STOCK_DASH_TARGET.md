@@ -35,3 +35,10 @@ No claim of full stock dashboard ACK coverage, no claim of full VESC Tool parity
 - `COMM_SET_APPCONF` is *not* implemented in G30 compact dispatch yet: existing `confgenerator_deserialize_appconf()` has no input length and writing full app settings needs dashboard-control preservation and packet-bound checks before use.
 - Stock dashboard parser, status response, CMD64 timing/ACK, IAP, bootloader, recovery and motor control remain **unchanged**.
 - No CI build or bench validation performed for these changes. There must be no candidate flash image until compile/link and regression tests have passed.
+
+## Point 1: VESC Tool application configuration write (2026-10-21)
+- G30 compact dispatcher now implements `COMM_SET_APPCONF`, alongside GET_APPCONF and default configuration reads.
+- VESC 6.06 generated serializer and decoder each use **476 bytes** including reserved fields. Reject payloads with any other length before invoking the legacy length-unaware decoder.
+- Decode into a separate allocated copy and preserve the original stock dashboard app selection, ADC control mode, VESC service-UART baud rate and shutdown mode. Check ADC mapping and update rate before applying and storing. Send ACK only on a successful store.
+- Static regression test: `python3 -m unittest discover -s tools/tests -p 'test_g30_appconf_contract.py'`.
+- **Status:** Implemented and source-reviewed on development branch. Full firmware build and actual VESC Tool write/readback still untested. No BIN issued. Dashboard framing and FO7x IAP/recovery untouched.
