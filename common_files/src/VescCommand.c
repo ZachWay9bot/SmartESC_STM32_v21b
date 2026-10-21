@@ -370,6 +370,7 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         buffer[ind++] = packet_id;
         uint32_t mask = 0xFFFFFFFFu;
         if (packet_id == COMM_GET_VALUES_SELECTIVE) {
+            if (len < 4u) break; /* selective values mask is four bytes */
             int32_t ri = 0;
             mask = buffer_get_uint32(data, &ri);
             buffer_append_uint32(buffer, mask, &ind);
@@ -404,16 +405,19 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     } break;
 
     case COMM_SET_CURRENT: {
+        if (len < 4u) break;
         int32_t ind = 0;
         VescToSTM_set_torque(buffer_get_int32(data, &ind));
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_CURRENT_BRAKE: {
+        if (len < 4u) break;
         int32_t ind = 0;
         VescToSTM_set_brake(-buffer_get_int32(data, &ind));
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_MCCONF: {
+        if (len < 4u) break; /* signature is mandatory; full length audit remains open */
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
         *mcconf = *mc_interface_get_configuration();
@@ -430,17 +434,37 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         vPortFree(mcconf);
     } break;
 
-    case COMM_GET_MCCONF: {
+    case COMM_GET_MCCONF:
+    case COMM_GET_MCCONF_DEFAULT: {
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
-        *mcconf = *mc_interface_get_configuration();
+        if (packet_id == COMM_GET_MCCONF) {
+            *mcconf = *mc_interface_get_configuration();
+        } else {
+            confgenerator_set_defaults_mcconf(mcconf);
+        }
         commands_send_mcconf(packet_id, mcconf, phandle);
         vPortFree(mcconf);
     } break;
 
+    case COMM_GET_APPCONF:
+    case COMM_GET_APPCONF_DEFAULT: {
+        app_configuration *conf = pvPortMalloc(sizeof(app_configuration));
+        if (!conf) break;
+        if (packet_id == COMM_GET_APPCONF) {
+            *conf = *app_get_configuration();
+        } else {
+            confgenerator_set_defaults_appconf(conf);
+        }
+        commands_send_appconf(packet_id, conf, phandle);
+        vPortFree(conf);
+    } break;
+
     /*
-     * G30 DETECT profile intentionally omits APPCONF and MCCONF_DEFAULT.
-     * Live motor config, telemetry and control remain available.
+     * COMM_SET_APPCONF is intentionally not enabled yet: the existing
+     * deserializer has no input-length parameter and writes application
+     * configuration. Verify bounded parsing and dashboard-mode preservation
+     * before enabling VESC Tool writes on the stock dashboard target.
      */
     /*
      * G30 FOC detection. These two commands keep the manual Detect FOC page
