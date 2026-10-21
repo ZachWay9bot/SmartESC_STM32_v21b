@@ -52,3 +52,8 @@ No claim of full stock dashboard ACK coverage, no claim of full VESC Tool parity
 - **Host regression test:** `python3 -m unittest discover -s tools/tests -p 'test_g30_dash_protocol.py'`. Compiles and runs the actual `ninebot.c` parser/CRC code (requires a C compiler), tests a historical CMD65 payload, malformed checksum, and a native CMD64 request and status reply.
 - **Not yet verified:** live Dash↔SmartESC UART trace, acknowledgement latency, display reaction, original dashboard variants, and BMS-based battery SOC. Battery percentage currently uses the VESC controller battery-voltage estimate, not a proven Ninebot BMS SoC feed. No new heartbeat watchdog or link lockouts introduced.
 - No changes to IAP, flash layout, bootloader, recovery, FOC motor control, or start conditions.
+
+## Build blocker found during point 2
+- GitHub Actions run [39623806452](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/39623806452) compiled sources but failed at link: `.rodata` will not fit into region `FLASH`; region overflow **1,892 bytes**. The larger application/configuration functionality from point 1 and other code is currently not link-qualified; this is not evidence of a dashboard protocol failure.
+- Do **not** enlarge linker memory or move bootloader/IAP/staging merely to make the image fit. A code-size audit within the existing application window is needed before shipping a candidate.
+- Native CMD64 heartbeat/status pathway and historical CMD65 mapping are source-audited; live dash+ESC testing remains outstanding. No extra unverified ACK/heartbeat opcode has been added.
