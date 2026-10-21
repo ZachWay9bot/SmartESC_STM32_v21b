@@ -131,7 +131,10 @@ class G30FOCContract(unittest.TestCase):
         self.assertIn("}else if(pwr>=0)", case)
         self.assertIn("VescToSTM_set_current_rel(pwr);", case)
         self.assertLess(case.index("if(brake>0)"), case.index("}else if(pwr>=0)"))
-        self.assertEqual("brake" if .40 > 0 else "throttle", "brake")
+        # The intermediate throttle/brake mix must not displace the
+        # final brake-priority command branch.
+        self.assertIn("pwr -= brake;", callback)
+        self.assertIn("if(app_is_output_disabled())", callback)
 
 
 if __name__ == "__main__":
