@@ -465,8 +465,8 @@ g30_detect_cleanup:
 	/* Release commanded torque and open-loop mode before returning to normal
 	 * push-start driving. This runs after success, failure or user abort. */
 	VescToSTM_set_current(0.0f, 0.0f);
-	VescToSTM_set_open_loop(false, 0, 0);
 	VescToSTM_pwm_force(false, false);
+	VescToSTM_set_open_loop(false, 0, 0);
 #else
 	VescToSTM_pwm_force(false, true);
 #endif
