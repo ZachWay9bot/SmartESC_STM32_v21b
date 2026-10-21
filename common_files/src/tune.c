@@ -121,6 +121,11 @@ bool tune_mcpwm_foc_hall_detect(float current, uint8_t *hall_table) {
  * The calculated motor resistance.
  */
 float tune_foc_measure_resistance(float current, int samples) {
+#ifdef G30P
+	/* Permit the deliberate stationary Detect measurement before requesting PWM.
+	 * Otherwise G30SL_PreparePwmStart sees the normal kick-start gate. */
+	VescToSTM_set_open_loop(true, 0, 0);
+#endif
 	VescToSTM_pwm_force(true, true);
 	// Disable timeout
 	VescToSTM_enable_timeout(false);
@@ -128,9 +133,10 @@ float tune_foc_measure_resistance(float current, int samples) {
 	MCI_ExecTorqueRamp(pMCI[M1], 0, 0);
 	MCI_StartMotor( pMCI[M1] );
 
-	// Lock the motor
+	// Lock the motor (other platforms keep their existing ordering).
+#ifndef G30P
 	VescToSTM_set_open_loop(true, 0, 0);
-
+#endif
 	VescToSTM_ramp_current(current,0);
 
 	// Wait for the current to rise and the motor to lock.
@@ -188,6 +194,10 @@ float tune_foc_measure_resistance(float current, int samples) {
 extern PID_Handle_t *pPIDIq[NBR_OF_MOTORS];
 extern PID_Handle_t *pPIDId[NBR_OF_MOTORS];
 float tune_foc_measure_inductance(float voltage, float * used_current, uint32_t samples) {
+#ifdef G30P
+	/* Measurement pulses require stationary open-loop access on G30. */
+	VescToSTM_set_open_loop(true, 0, 0);
+#endif
 	VescToSTM_pwm_force(true, true);
 	float voltage_calc = 32768.0 / VescToSTM_get_bus_voltage() * voltage;
 
@@ -197,9 +207,10 @@ float tune_foc_measure_inductance(float voltage, float * used_current, uint32_t 
 	VescToSTM_enable_timeout(false);
 
 	// Lock the motor
+#ifndef G30P
 	pMCI[M1]->pSTC->SPD->open_loop = true;
 	pMCI[M1]->pSTC->SPD->open_angle =0;
-
+#endif
 	int16_t IqUpperLim = pPIDIq[M1]->hUpperOutputLimit;
 	int16_t IqLowerLim = pPIDIq[M1]->hLowerOutputLimit;
 	int16_t IdUpperLim = pPIDId[M1]->hUpperOutputLimit;
@@ -341,6 +352,10 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 		float erpm_per_sec, float res, float ind, float *linkage,
 		float *linkage_undriven, float *undriven_samples) {
 	if (tune_abort_requested) return false;
+#ifdef G30P
+	/* Ensure Detect All can spin from rest, independent of the riding gate. */
+	VescToSTM_set_open_loop(true, 0, 0);
+#endif
 	VescToSTM_pwm_force(true, true);
 	bool result = false;
 
@@ -350,8 +365,9 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 	int cnt = 0;
 	float erpm_now = 0;
 
+#ifndef G30P
 	VescToSTM_set_open_loop(true, 0, 0);
-
+#endif
 	// Start by locking the motor
 	VescToSTM_ramp_current(current,0);
 
@@ -446,7 +462,10 @@ bool tune_foc_measure_flux_linkage_openloop(float current, float duty,
 	}
 g30_detect_cleanup:
 #ifdef G30P
-	/* Detection must leave the G30 bridge positively off on every exit path. */
+	/* Release commanded torque and open-loop mode before returning to normal
+	 * push-start driving. This runs after success, failure or user abort. */
+	VescToSTM_set_current(0.0f, 0.0f);
+	VescToSTM_set_open_loop(false, 0, 0);
 	VescToSTM_pwm_force(false, false);
 #else
 	VescToSTM_pwm_force(false, true);
