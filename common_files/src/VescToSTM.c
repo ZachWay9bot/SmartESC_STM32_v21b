@@ -120,7 +120,7 @@ int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 	uint16_t temp = NTC_GetAvTemp_d(pMCT[M1]->pTemperatureSensor);
 	if(temp < fp.temp_cut_start){
 		app_adc_set_mode(M365_MODE_TEMP);
-		iq = utils_map_int(temp, fp.temp_cut_start, fp.battery_cut_end, 0, iq);
+		iq = utils_map_int(temp, fp.temp_cut_start, fp.temp_cut_end, 0, iq);
 	}else{
 		app_adc_clear_mode(M365_MODE_TEMP);
 	}
