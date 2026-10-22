@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import struct
+import sys
 import zipfile
 from pathlib import Path
 
