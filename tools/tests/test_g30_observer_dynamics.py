@@ -76,8 +76,39 @@ static int steady_motion(int dir) {
     if(g30sl_core_run_valid(&s) || s.observer_bad<20u)return 6;
     return 0;
 }
+/* The initial observer angle must agree with the angle used for the
+ * first current-control sample. Test all six BEMF sectors and both directions,
+ * including signed 16-bit angle wrap-around. */
+static int seed_phase_matches_commutation(int dir) {
+    const g30sl_core_config_t cfg={
+        .cpu_hz=72000000u,.observer_hz=1000u,
+        .bemf_span_min=40u,.min_speed_unit=160u,.min_lock_edges=4u,
+        .r_mohm=300u,.l_uh=250u,.lambda_uwb=13000u
+    };
+    for(unsigned first=0;first<6u;first++){
+        g30sl_core_t s;
+        g30sl_core_init(&s,&cfg);
+        uint32_t t=1000000u;
+        push_phase(&s,first,t);
+        for(unsigned i=1;i<=4;i++){
+            t+=700000u;
+            unsigned sec=dir>0 ? (first+i)%6u : (first+6u-(i%6u))%6u;
+            push_phase(&s,sec,t);
+        }
+        if(!g30sl_core_roll_ready(&s,t))return 1;
+        g30sl_core_seed_observer_from_roll(&s,0,0);
+        if(!s.observer_seeded)return 2;
+        int16_t delta=(int16_t)(s.observer_phase-s.control_phase);
+        if(delta>6000 || delta< -6000)return 3;
+    }
+    return 0;
+}
 int main(void){
-    int f=steady_motion(+1);
+    int f=seed_phase_matches_commutation(+1);
+    if(f){fprintf(stderr,"forward phase seed failed: %d\n",f);return 30+f;}
+    f=seed_phase_matches_commutation(-1);
+    if(f){fprintf(stderr,"reverse phase seed failed: %d\n",f);return 40+f;}
+    f=steady_motion(+1);
     if(f){fprintf(stderr,"forward failed: %d\n",f);return 10+f;}
     f=steady_motion(-1);
     if(f){fprintf(stderr,"reverse failed: %d\n",f);return 20+f;}
