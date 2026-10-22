@@ -35,7 +35,7 @@ jobs:
         run: |
           python3 tools/audit_g30_ram.py \
             --elf g30p/STM32CubeIDE/Debug/g30p.elf \
-            --json-out g30p/STM32CubeIDE/Debug/g30-ram-audit.json
+            --json-out g30-ram-audit.json
 
       - name: Build SHU package
         run: |
@@ -100,4 +100,4 @@ jobs:
           name: G30-SRAM-audit-${{ github.run_number }}
           retention-days: 30
           if-no-files-found: warn
-          path: g30p/STM32CubeIDE/Debug/g30-ram-audit.json
+          path: g30-ram-audit.json
