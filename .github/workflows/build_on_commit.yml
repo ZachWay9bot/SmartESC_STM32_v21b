@@ -31,6 +31,12 @@ jobs:
           entrypoint: /opt/stm32cubeide/stm32cubeide
           args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
 
+      - name: Audit linked G30 SRAM allocation (read only)
+        run: |
+          python3 tools/audit_g30_ram.py \
+            --elf g30p/STM32CubeIDE/Debug/g30p.elf \
+            --json-out g30p/STM32CubeIDE/Debug/g30-ram-audit.json
+
       - name: Build SHU package
         run: |
           python3 tools/make_shu_zip.py \
@@ -83,3 +89,15 @@ jobs:
             g30p/STM32CubeIDE/Debug/g30p.map
             SmartESC_G30_NativeDash_v0.8.7_SHU.zip
             firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
+
+      # Diagnostic report only: no flashable binary, image or firmware ZIP.
+      # Remains available even when independent UART restore qualification
+      # (and therefore SHU packaging) correctly blocks the release.
+      - name: Upload SRAM audit only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: G30-SRAM-audit-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: g30p/STM32CubeIDE/Debug/g30-ram-audit.json
