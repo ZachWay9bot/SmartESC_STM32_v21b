@@ -61,6 +61,15 @@ jobs:
             echo "Format: encrypted UART-IAP Driver.bin, no SHU ZIP"
           } > SmartESC_G30_BENCH_BUILD_INFO.txt
 
+      # Independent *offline* check of artifact identity; no UART or flash.
+      - name: Verify BIN, encrypted UART-IAP and manifest agree
+        run: |
+          python3 tools/verify_g30_bench_artifacts.py \
+            g30p/STM32CubeIDE/Debug/g30p.bin \
+            SmartESC_G30_BENCH_IAP_Driver.bin \
+            SmartESC_G30_BENCH_MANIFEST.json \
+            --json-out SmartESC_G30_BENCH_VERIFY.json
+
       - name: Upload G30 bench binaries and build evidence
         uses: actions/upload-artifact@v4
         with:
@@ -73,6 +82,7 @@ jobs:
             g30p/STM32CubeIDE/Debug/g30p.map
             SmartESC_G30_BENCH_IAP_Driver.bin
             SmartESC_G30_BENCH_MANIFEST.json
+            SmartESC_G30_BENCH_VERIFY.json
             SmartESC_G30_BENCH_BUILD_INFO.txt
 
       # Diagnostic artifacts remain available independently of the IAP build.
