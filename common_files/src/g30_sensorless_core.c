@@ -76,7 +76,12 @@ void g30sl_core_sample_bemf(g30sl_core_t *s, uint16_t a, uint16_t b, uint16_t c,
     s->a = a; s->b = b; s->c = c; s->span = (uint16_t)(hi - lo);
     s->last_sample_cycles = now_cycles;
     if (s->span < s->cfg.bemf_span_min) {
+        /* Voltage disappeared: the next attempt must acquire fresh sector
+         * transitions. Keeping edge counters lets one later edge falsely
+         * complete a lock using transitions from before the dropout. */
         s->rolling_locked = 0u; s->direction = 0; s->speed_unit = 0;
+        s->forward_edges = s->reverse_edges = 0u;
+        s->avg_edge_cycles = 0u;
         s->last_sector = G30SL_NO_SECTOR; s->last_edge_cycles = 0u;
         return;
     }
@@ -99,12 +104,13 @@ void g30sl_core_sample_bemf(g30sl_core_t *s, uint16_t a, uint16_t b, uint16_t c,
     uint32_t dt = now_cycles - s->last_edge_cycles;
     s->last_sector = sec; s->last_edge_cycles = now_cycles;
     if (step != 1u && step != 5u) {
-        s->rolling_locked = 0u; s->direction = 0;
+        s->rolling_locked = 0u; s->direction = 0; s->speed_unit = 0;
         s->forward_edges = s->reverse_edges = 0u; s->avg_edge_cycles = 0u;
         return;
     }
     if (dt < (s->cfg.cpu_hz / 2000u) || dt > (s->cfg.cpu_hz / 4u)) {
-        s->rolling_locked = 0u; s->forward_edges = s->reverse_edges = 0u;
+        s->rolling_locked = 0u; s->direction = 0; s->speed_unit = 0;
+        s->forward_edges = s->reverse_edges = 0u;
         s->avg_edge_cycles = 0u;
         return;
     }
@@ -133,8 +139,11 @@ void g30sl_core_sample_bemf(g30sl_core_t *s, uint16_t a, uint16_t b, uint16_t c,
                                   : (uint16_t)(PHASE_180 - s->bemf_phase);
 
     uint16_t edges = dir > 0 ? s->forward_edges : s->reverse_edges;
-    if (edges >= s->cfg.min_lock_edges &&
-        uabs32(s->speed_unit) >= s->cfg.min_speed_unit) s->rolling_locked = 1u;
+    /* Track the measured speed on every edge, not just the first lock.
+     * Otherwise a previously acquired roll lock remains asserted after
+     * the wheel has fallen below the configured ~3 km/h threshold. */
+    s->rolling_locked = (uint8_t)(edges >= s->cfg.min_lock_edges &&
+                                  uabs32(s->speed_unit) >= s->cfg.min_speed_unit);
 }
 
 bool g30sl_core_roll_ready(const g30sl_core_t *s, uint32_t now_cycles) {
