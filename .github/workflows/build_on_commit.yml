@@ -37,6 +37,12 @@ jobs:
             --elf g30p/STM32CubeIDE/Debug/g30p.elf \
             --json-out g30-ram-audit.json
 
+      # Review known FreeRTOS allocations WITHOUT modifying firmware.
+      # Unguarded sites are reported as findings; no live heap claim.
+      - name: Audit G30 FreeRTOS heap allocation paths (read only)
+        run: |
+          python3 tools/audit_g30_heap_paths.py --json-out g30-heap-audit.json
+
       # Current development bench has no dashboard: build an encrypted UART
       # IAP test payload, reusing the *unchanged* NinebotTEA encoding.
       # This creates artifacts only; it never flashes hardware or publishes
@@ -69,12 +75,14 @@ jobs:
             SmartESC_G30_BENCH_MANIFEST.json
             SmartESC_G30_BENCH_BUILD_INFO.txt
 
-      # Diagnostic artifact stays available independently of the IAP build.
-      - name: Upload SRAM audit only
+      # Diagnostic artifacts remain available independently of the IAP build.
+      - name: Upload G30 SRAM and heap audits
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: G30-SRAM-audit-${{ github.run_number }}
           retention-days: 30
           if-no-files-found: warn
-          path: g30-ram-audit.json
+          path: |
+            g30-ram-audit.json
+            g30-heap-audit.json
