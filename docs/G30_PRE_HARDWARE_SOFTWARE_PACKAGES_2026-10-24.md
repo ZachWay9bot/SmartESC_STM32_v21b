@@ -124,12 +124,29 @@ py tools/verify_g30_bench_artifacts.py g30p.bin SmartESC_G30_BENCH_IAP_Driver.bi
 
 Diese Prüfung hat **keinen seriellen Zugriff und kann nichts flashen**.
 
+### Paket 6 – VESC-Paketdecoder mit echtem C-Code testen
+
+Neue Datei: `tools/tests/test_g30_packet_stream.py`.
+
+Mit einem kleinen Host-FreeRTOS/CRC16-Testadapter wird die **tatsaechliche,
+unveraenderte `common_files/src/packet.c`** ausgefuehrt:
+
+- gueltige Payloads mit 1, 255, 256 und 512 Byte;
+- stueckweise eintreffende, unvollstaendige Frames (keine vorzeitige Antwort);
+- absichtlich falsche CRC (Frame ablehnen, danach neu synchronisieren);
+- 7.000 Rauschbytes vor einem gueltigen Frame;
+- leere und zu lange Pakete (keine Sendung, kein Decoder-Overflow).
+
+Der CRC16-Hostadapter nutzt dasselbe Polynom wie die eingebettete CRC16-
+Funktion. Dieser Test belegt die **Host-Parserlogik**, nicht die reale UART-DMA-
+Interruptkette und nicht den dynamischen Heap bei Erschoepfung.
+
 ## Automatische Regressionen
 
-- 56/56 G30-Hosttests am Pakete-5-Stand erfolgreich:
-  https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40032932072
+- 57/57 G30-Hosttests inklusive Paket 6 erfolgreich:
+  https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40033237790
 - Anti-Lockout/Recovery-Quellcodecheck:
-  https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40032932112
+  https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40033237742
 - Bench-Build (ohne SHU) und aktuelle Buildartefakte:
   https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40032932134
 
