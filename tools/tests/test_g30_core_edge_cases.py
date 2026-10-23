@@ -76,10 +76,11 @@ static int reversal(void) {
     sample(&s,3u,now); /* Last 4 -> 3: first opposite edge. */
     if(s.direction!=-1 || s.forward_edges!=0u ||
        s.reverse_edges!=1u || s.rolling_locked)return 2;
-    now+=700000u;sample(&s,3u,now); /* duplicate sector */
+    now+=100000u;sample(&s,3u,now); /* duplicate sector, same edge cadence */
     if(s.reverse_edges!=1u || s.rolling_locked)return 3;
     for(unsigned sector=2u;sector<6u;sector--) {
-        now+=700000u;sample(&s,sector,now);
+        now+=(sector==2u ? 600000u : 700000u);
+        sample(&s,sector,now);
         if(sector==0u)break;
     }
     if(!g30sl_core_roll_ready(&s,now) ||
