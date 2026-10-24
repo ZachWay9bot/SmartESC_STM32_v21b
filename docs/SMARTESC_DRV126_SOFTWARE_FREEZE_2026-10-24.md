@@ -1,6 +1,52 @@
 # SmartESC G30 Gen1 – DRV126-Abgleich und Software-Freeze
 Stand: 2026-10-24. Branch: `audit/vesc-g30-20261021`, Draft PR #23.
-Status: **SOFTWARE FREEZE / HARDWARE PENDING**, kein hardwarequalifiziertes Fahr-Release.
+Status: **SOFTWARE FREEZE / HARDWARE NOW PRESENT, FIRST CONTACT**, kein hardwarequalifiziertes Fahr-Release.
+
+## Live-Update 24.10.2026 – G30 Gen1 angekommen
+
+- Der jetzt angeschlossene Controller antwortete mit der originalen Identität
+  `N4GEA1601C0001` und Versionsrohbytes `87 01`, d. h. DRV `0x0187` / 1.8.7,
+  auf COM9 über den vorhandenen Ninebot-UART. Dies ist noch **keine** SmartESC-Firmware.
+- Private RemoteLab-Steuerqueue `ZachWay9bot/xbot-remote-lab` #5 wurde neu eingerichtet.
+  Der alte FO91-Kanal #1 ist archiviert/gesperrt. Agent v0.6.0 hat #5 erfolgreich
+  per Ping bestätigt; ein alter FO-spezifischer Diagnoseaufruf erhielt von
+  Stock keine nutzbare Antwort. Die Flash-/Motor-Permit-Session ist abgelaufen.
+- **Wichtig für VESC Tool:** Der G30-Source routet `VESC_USART_DMA=huart1`
+  auf USART1 (TX PB6, RX PB7); `APP_USART_DMA=huart2` ist die normale
+  Ninebot-Halbduplex-Dashboard-Leitung (PA2), über die der Stock-COM9-Probe lief.
+  COM9 ist ohne physische Umverdrahtung oder ausdrücklich geplanten UART-Multiplexer
+  **nicht automatisch** der VESC-Tool-Port für die aktuelle Standardkonfiguration.
+- Die G30-Firmware antwortet als VESC-FW **5.03** (`defines.h`); die früheren
+  Dokumentangaben zu 6.06 beziehen sich auf Serialisierer-/Hostannahmen, nicht
+  auf eine nachgewiesene VESC-Tool-Live-Verbindung. Firmwareversionswechsel
+  nicht als Schein-Kompatibilitätsfix vornehmen.
+- Die aktive G30-Dispatchervariante implementiert bereits
+  `COMM_DETECT_APPLY_ALL_FOC` (R/L/Flux, Konfigurationsspeicherung und
+  16-Bit-Ergebnisantwort). Das ist **nur softwareseitig verifiziert**;
+  noch keine vollständige VESC-Tool-Motor-Detection am echten Gen1.
+- Nach dem Einstecken bestätigt der neue Agent noch **keinen** unabhängigen
+  UART-IAP-Stock-Restore. Den bewährten Bootloader/IAP unverändert lassen.
+
+### VESC-UART-Zuverlässigkeit – Quellkorrektur am 24.10.2026
+
+Auf dem Entwicklungsbranch wurden ausschließlich die FreeRTOS-allokierten
+VESC-Paketpuffer und das Fehlerverhalten des CLI-Tasks abgesichert. Wenn
+`pvPortMalloc` NULL liefert, wird kein Nullpointer mehr dereferenziert,
+und der UART-Task startet nicht mit unvollständigen Puffern. Bestehende
+VESC-Frames auf dem erfolgreichen Pfad, Motorsteuerung und Ninebot-IAP
+sind unverändert. Der echte `packet.c`-Test prüft beide OOM-Punkte.
+Commit `fc6d7389bfcf8b086c70954ebfaa5491e98cfd31`:
+[Host-CI](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40130747458),
+[STM32-Build](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40130747569),
+[Recovery-Audit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40130747514)
+alle erfolgreich. **Keiner dieser Erfolge beweist elektrische Hardwaretauglichkeit.**
+
+Noch nicht umgesetzt: VESC-Tool-UART über die vorhandene Ninebot-PA2-Leitung
+bei gleichzeitigem stock Dashboard; der potentielle Multiplexer wäre eine
+Änderung am Live-Kommunikationspfad mit DMA-/Heap-/IAP-Risiko und muss
+gegen die Alternative getrennter PB6/PB7-UART abgewogen werden.
+
+
 
 ## Warum dieses Dokument existiert
 
