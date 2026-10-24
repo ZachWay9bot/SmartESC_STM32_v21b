@@ -31,6 +31,12 @@ jobs:
           entrypoint: /opt/stm32cubeide/stm32cubeide
           args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
 
+      - name: Verify linked scheduler vectors and communication task startup
+        run: |
+          python3 tools/audit_g30_startup.py \
+            --elf g30p/STM32CubeIDE/Debug/g30p.elf \
+            --json-out g30-startup-audit.json
+
       - name: Audit linked G30 SRAM allocation (read only)
         run: |
           python3 tools/audit_g30_ram.py \
@@ -84,6 +90,7 @@ jobs:
             SmartESC_G30_BENCH_MANIFEST.json
             SmartESC_G30_BENCH_VERIFY.json
             SmartESC_G30_BENCH_BUILD_INFO.txt
+            g30-startup-audit.json
 
       # Diagnostic artifacts remain available independently of the IAP build.
       - name: Upload G30 SRAM and heap audits
@@ -96,3 +103,5 @@ jobs:
           path: |
             g30-ram-audit.json
             g30-heap-audit.json
+            g30-startup-audit.json
+
