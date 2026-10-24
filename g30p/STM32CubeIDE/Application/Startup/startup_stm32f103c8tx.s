@@ -220,17 +220,29 @@ g_pfnVectors:
   .weak UsageFault_Handler
   .thumb_set UsageFault_Handler,Default_Handler
 
-  .weak SVC_Handler
-  .thumb_set SVC_Handler,Default_Handler
+  .global SVC_Handler
+  .type SVC_Handler, %function
+  .thumb_func
+SVC_Handler:
+  b vPortSVCHandler
+  .size SVC_Handler, .-SVC_Handler
 
   .weak DebugMon_Handler
   .thumb_set DebugMon_Handler,Default_Handler
 
-  .weak PendSV_Handler
-  .thumb_set PendSV_Handler,Default_Handler
+  .global PendSV_Handler
+  .type PendSV_Handler, %function
+  .thumb_func
+PendSV_Handler:
+  b xPortPendSVHandler
+  .size PendSV_Handler, .-PendSV_Handler
 
-  .weak SysTick_Handler
-  .thumb_set SysTick_Handler,Default_Handler
+  .global SysTick_Handler
+  .type SysTick_Handler, %function
+  .thumb_func
+SysTick_Handler:
+  b xPortSysTickHandler
+  .size SysTick_Handler, .-SysTick_Handler
 
   .weak WWDG_IRQHandler
   .thumb_set WWDG_IRQHandler,Default_Handler
