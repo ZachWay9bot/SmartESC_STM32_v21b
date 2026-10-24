@@ -20,7 +20,7 @@ class G30UniqueID(unittest.TestCase):
         self.assertIn("0x1FFFF7E8u", g30)
         self.assertIn("memcpy(ptr, uid, size);", g30)
         self.assertIn("if(size>12) size=12;", function)
-        self.assertIn("uint8_t VescToSTM_get_uid(buffer + ind, 12)", COMMANDS)
+        self.assertIn("ind += VescToSTM_get_uid(buffer + ind, 12);", COMMANDS)
         self.assertIn("0x1FFFF7E8u", RECOVERY)
         self.assertNotIn("test[12]", g30)
 
