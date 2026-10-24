@@ -22,10 +22,10 @@ FILES = {
 CHECKS = (
     ("packet_state", "packet", "packet_init", "ret",
      "pvPortMalloc(sizeof(PACKET_STATE_t))", "memset(ret, 0",
-     "VESC packet state: dereference after allocation"),
+     "VESC packet state: allocation now checked before use"),
     ("packet_rx_buffer", "packet", "packet_init", "ret->rx_buffer",
      "pvPortMalloc(BUFFER_LEN)", "return ret;",
-     "VESC packet receive buffer: returned without allocation check"),
+     "VESC packet receive buffer: allocation failure now frees state"),
     ("dashboard_uart_rx", "dashboard", "task_app", "usart_rx_dma_buffer",
      "pvPortMalloc(port->rx_buffer_size)", "HAL_UART_Receive_DMA(",
      "Dashboard UART DMA target: allocation used by HAL"),
