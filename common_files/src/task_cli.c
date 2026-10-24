@@ -68,14 +68,24 @@ void task_cli(void * argument)
 	uint32_t rd_ptr=0;
 	port_str * port = (port_str*) argument;
 	uint8_t * usart_rx_dma_buffer = pvPortMalloc(port->rx_buffer_size);
+	if (usart_rx_dma_buffer == NULL) {
+		port->task_handle = NULL;
+		vTaskDelete(NULL);
+		return;
+	}
+	port->phandle = packet_init(putbuffer, process_packet, port);
+	if (port->phandle == NULL) {
+		vPortFree(usart_rx_dma_buffer);
+		port->task_handle = NULL;
+		vTaskDelete(NULL);
+		return;
+	}
 	HAL_UART_MspInit(port->uart);
 	if(port->half_duplex){
 		HAL_HalfDuplex_Init(port->uart);
 	}
 	HAL_UART_Receive_DMA(port->uart, usart_rx_dma_buffer, port->rx_buffer_size);
 	CLEAR_BIT(port->uart->Instance->CR3, USART_CR3_EIE);
-
-	port->phandle = packet_init(putbuffer, process_packet, port);
 
 	VescToSTM_set_brake_rel_int(0);
 
