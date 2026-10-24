@@ -41,6 +41,50 @@ Commit `fc6d7389bfcf8b086c70954ebfaa5491e98cfd31`:
 [Recovery-Audit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40130747514)
 alle erfolgreich. **Keiner dieser Erfolge beweist elektrische Hardwaretauglichkeit.**
 
+### Entscheidend: KEIN FLASH über COM9 vor Rückweg-Nachweis
+
+Im wirklich aktiven SmartESC-Source verwendet `common_files/src/g30_recovery_iap.c`
+bei Frühstart `uart_init_rec()` **USART1 auf PB6/PB7** (AFIO-Remap);
+`g30p/Src/main.c` und `common_files/inc/product.h` benutzen für die
+gewöhnliche Stock-Dashboard-Eindrahtleitung dagegen **USART2/PA2**.
+
+Der aktuell erfolgreiche Stock-Test `N4GEA1601C0001` / `0x0187` ist auf
+der Ninebot-Leitung COM9 erfolgt. Aus diesem Test **folgt nicht**, dass die
+SmartESC-Frühstart-Recovery über dieselbe Leitung erreichbar wäre. Ebenso
+liegt hier kein Zielhardware-Nachweis vor, dass der unabhängige Stock-Loader
+die App nach einem Bootfehler selbstständig über PA2 wiederherstellen kann.
+Die gegenwärtige lokale Agent-Software v0.6.0 ist außerdem auf
+`XBOTFOxx`-Applikationsversionen zugeschnitten, nicht auf eine echte
+Stock-DRV1.8.7-basierte SmartESC-IAP-Sitzung.
+
+**Daher kein automatisches Installieren des Bench-Drivers auf dem neuen
+vergossenen Controller.** Eine eigene VESC-Tool-UART-Verkabelung PB6/PB7
+ist nur relevant, falls diese Pads/Leitungen tatsächlich zugänglich sind.
+Eine Dual-Protokoll-Umschaltung der einzigen PA2-Leitung könnte VESC Tool
+und Rückflashpfad koppeln; das wäre eine relevante UART-/IAP-Änderung mit
+erneutem FO91-Lockout-Risiko und bedarf ausdrücklicher Vorabfreigabe.
+
+### Neuester G30-Bench-Kandidat: Coast-only und VESC-Allocator
+
+SmartESC `b6fda7ec8830ca53a7ceb8d20bad55ea6c83ebaf`:
+- In G30P führen Dashboard-Bremse und `COMM_SET_CURRENT_BRAKE`
+  über `VescToSTM_set_brake_current_rel` / `VescToSTM_set_brake`
+  nun zu 0 Stromvorgabe und PWM-Gates-off (Coast), **keine aktive
+  Generator-/Rekuperationsbremse auf diesen Eingabepfaden**.
+  Die Nicht-G30-Implementierung bleibt unverändert.
+- `packet_init` und der G30 VESC-UART-Task sind gegen fehlgeschlagene
+  FreeRTOS-Puffer-Allokationen abgesichert; bei fehlendem RAM wird der
+  UART-Task nicht mit einem NULL-Paketpuffer gestartet.
+- `COMM_DETECT_APPLY_ALL_FOC`, Sensorless-Rollstart, Timings,
+  UART-Routing, IAP, Bootloader, App-Recovery, Linker und Flashlayout
+  wurden nicht verändert.
+- Für diesen exakten Commit [Hosttests](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40131220129),
+  [Bench ARM & verschlüsselter IAP-Kandidat](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40131220136)
+  und [UART-Recovery-Quellaudit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40131220146)
+  sämtlich erfolgreich, **weiterhin kein realer Motor- oder Rückflashtest**.
+- Das aktuelle Build-Artefakt heißt `SmartESC-G30-BENCH-271`. Es ist ein
+  **nicht hardwarequalifizierter Kandidat**, kein freigegebenes Fahrimage.
+
 Noch nicht umgesetzt: VESC-Tool-UART über die vorhandene Ninebot-PA2-Leitung
 bei gleichzeitigem stock Dashboard; der potentielle Multiplexer wäre eine
 Änderung am Live-Kommunikationspfad mit DMA-/Heap-/IAP-Risiko und muss
@@ -52,7 +96,7 @@ gegen die Alternative getrennter PB6/PB7-UART abgewogen werden.
 
 Kein weiterer Kreislauf aus wiederholten Hosttests. Softwareentwicklung ist bis
 auf konkrete, nachweislich notwendige Anpassungen am eintreffenden Controller
-abgeschlossen. Der Controller ist gegenwärtig **nicht vorhanden**. Das bestehende
+abgeschlossen. Der Controller ist am 24.10. eingetroffen; die Hardware-Identifikation lief erstmals, der SmartESC-Kandidat ist noch nicht geflasht. Das bestehende
 UART-IAP und der Bootloader bleiben unverändert. Es gibt am Bench kein Dash;
 SHU wird erst auf erneuten ausdrücklichen Auftrag zurückgebracht. Für den
 aktuellen versiegelten Controller gibt es **keinen SWD/ST-Link-Zugang**.
