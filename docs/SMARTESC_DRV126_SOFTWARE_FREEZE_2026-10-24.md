@@ -2,7 +2,7 @@
 Stand: 2026-10-24. Branch: `audit/vesc-g30-20261021`, Draft PR #23.
 Status: **BMS-VESC-Tool-Port umgesetzt / IoT-IAP unverändert / HARDWARE-BENCH-PENDING**, kein hardwarequalifiziertes Fahr-Release.
 
-**Verbindlicher neuer Stand, 24.10.2026:** IoT = USART1 PB6/PB7, original UART-IAP/Recovery; BMS = USART3 PB10/PB11, jetzt aktive VESC-Tool-Schnittstelle; gelbe Leitung = USART2 PA2, Ninebot-Dashboard. Neuester Softwarecommit `507e0b19208709c12126a84bac00f2a22f4b58b7`, Build `SmartESC-G30-BENCH-274` ([GitHub Actions](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372279)); **63 Hosttests** grün ([CI](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372308)); Recovery-Quellaudit grün ([CI](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372313)). Kein SmartESC-Flash oder echter VESC-Tool-Test bisher.
+**Verbindlicher neuer Stand, 24.10.2026:** IoT = USART1 PB6/PB7, original UART-IAP/Recovery; BMS = USART3 PB10/PB11, jetzt aktive VESC-Tool-Schnittstelle; gelbe Leitung = USART2 PA2, Ninebot-Dashboard. Neuester Softwarecommit `5341ebe5d0cddf888f3397cfe7c98b960379b344`, Build `SmartESC-G30-BENCH-278` ([GitHub Actions](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40133329522)); Hosttests und Recovery-Audit für den aktuellen Branch weiterhin grün. Kein SmartESC-Flash oder echter VESC-Tool-Test bisher.
 
 ## Live-Update 24.10.2026 – G30 Gen1 angekommen
 
@@ -82,14 +82,14 @@ SmartESC `b6fda7ec8830ca53a7ceb8d20bad55ea6c83ebaf`:
   [Bench ARM & verschlüsselter IAP-Kandidat](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40131220136)
   und [UART-Recovery-Quellaudit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40131220146)
   sämtlich erfolgreich, **weiterhin kein realer Motor- oder Rückflashtest**.
-- Das aktuelle Build-Artefakt heißt `SmartESC-G30-BENCH-271`. Es ist ein
+- Das aktuelle Build-Artefakt heißt `SmartESC-G30-BENCH-278`. Es ist ein
   **nicht hardwarequalifizierter Kandidat**, kein freigegebenes Fahrimage.
 
 **Am 24.10. erledigt:** Statt eines PA2-Multiplexers nutzt VESC Tool die
 zugängliche BMS-UART-Leitung USART3 PB10/PB11. Im IoT/IAP-Pfad auf
 USART1 PB6/PB7 und im Dashboard-Pfad USART2 PA2 wurde nichts geändert.
 Die oben genannten früheren Kandidaten bleiben historische Referenzen;
-aktuell ist ausschließlich Build `SmartESC-G30-BENCH-274` zu betrachten.
+aktuell ist ausschließlich Build `SmartESC-G30-BENCH-278` zu betrachten.
 
 
 
