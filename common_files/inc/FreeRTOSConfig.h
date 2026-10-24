@@ -57,7 +57,11 @@
 #define configSUPPORT_STATIC_ALLOCATION          0
 #define configSUPPORT_DYNAMIC_ALLOCATION         1
 #define configUSE_IDLE_HOOK                      0
+#ifdef G30P
+#define configUSE_TICK_HOOK                      1
+#else
 #define configUSE_TICK_HOOK                      0
+#endif
 #define configCPU_CLOCK_HZ                       ( CPU_MHZ )
 #define configTICK_RATE_HZ                       ((TickType_t)2000)
 #define configMAX_PRIORITIES                     ( 16 )
@@ -149,3 +153,4 @@ standard names. */
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */
+

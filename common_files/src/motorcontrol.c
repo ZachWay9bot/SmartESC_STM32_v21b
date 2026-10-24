@@ -58,6 +58,15 @@ void vPortSetupTimerInterrupt( void )
   /* Reconfigure the SysTick interrupt to fire every 500 us. */
   HAL_SYSTICK_Config(HAL_RCC_GetHCLKFreq()/SYS_TICK_FREQUENCY);
 }
+
+#ifdef G30P
+/* The existing MCSDK medium-frequency scheduler is clocked from the same
+ * 2 kHz SysTick as FreeRTOS. It was not called by the old weak handler. */
+void vApplicationTickHook(void)
+{
+  MC_RunMotorControlTasks();
+}
+#endif
 /**
   * @}
   */
@@ -67,3 +76,4 @@ void vPortSetupTimerInterrupt( void )
   */
 
 /******************* (C) COPYRIGHT 2019 STMicroelectronics *****END OF FILE****/
+

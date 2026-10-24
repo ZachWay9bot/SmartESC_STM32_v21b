@@ -112,9 +112,17 @@ void vPortSetupTimerInterrupt( void );
 /*
  * Exception handlers.
  */
+#if defined( G30P )
+/* These entries are reached through the assembly vector table/SVC, not C
+ * calls. Retain their strong definitions when linking the G30 LTO image. */
+void xPortPendSVHandler( void ) __attribute__ (( naked, used, externally_visible ));
+void xPortSysTickHandler( void ) __attribute__ (( used, externally_visible ));
+void vPortSVCHandler( void ) __attribute__ (( naked, used, externally_visible ));
+#else
 void xPortPendSVHandler( void ) __attribute__ (( naked ));
 void xPortSysTickHandler( void );
 void vPortSVCHandler( void ) __attribute__ (( naked ));
+#endif
 
 /*
  * Start first task is a separate function so it can be tested in isolation.
@@ -695,6 +703,7 @@ __attribute__(( weak )) void vPortSetupTimerInterrupt( void )
 	}
 
 #endif /* configASSERT_DEFINED */
+
 
 
 
