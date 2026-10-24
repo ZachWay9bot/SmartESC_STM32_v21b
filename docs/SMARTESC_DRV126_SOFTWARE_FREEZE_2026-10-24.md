@@ -1,6 +1,8 @@
 # SmartESC G30 Gen1 – DRV126-Abgleich und Software-Freeze
 Stand: 2026-10-24. Branch: `audit/vesc-g30-20261021`, Draft PR #23.
-Status: **SOFTWARE FREEZE / HARDWARE NOW PRESENT, FIRST CONTACT**, kein hardwarequalifiziertes Fahr-Release.
+Status: **BMS-VESC-Tool-Port umgesetzt / IoT-IAP unverändert / HARDWARE-BENCH-PENDING**, kein hardwarequalifiziertes Fahr-Release.
+
+**Verbindlicher neuer Stand, 24.10.2026:** IoT = USART1 PB6/PB7, original UART-IAP/Recovery; BMS = USART3 PB10/PB11, jetzt aktive VESC-Tool-Schnittstelle; gelbe Leitung = USART2 PA2, Ninebot-Dashboard. Neuester Softwarecommit `507e0b19208709c12126a84bac00f2a22f4b58b7`, Build `SmartESC-G30-BENCH-274` ([GitHub Actions](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372279)); **63 Hosttests** grün ([CI](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372308)); Recovery-Quellaudit grün ([CI](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40132372313)). Kein SmartESC-Flash oder echter VESC-Tool-Test bisher.
 
 ## Live-Update 24.10.2026 – G30 Gen1 angekommen
 
@@ -11,11 +13,10 @@ Status: **SOFTWARE FREEZE / HARDWARE NOW PRESENT, FIRST CONTACT**, kein hardware
   Der alte FO91-Kanal #1 ist archiviert/gesperrt. Agent v0.6.0 hat #5 erfolgreich
   per Ping bestätigt; ein alter FO-spezifischer Diagnoseaufruf erhielt von
   Stock keine nutzbare Antwort. Die Flash-/Motor-Permit-Session ist abgelaufen.
-- **Wichtig für VESC Tool:** Der G30-Source routet `VESC_USART_DMA=huart1`
-  auf USART1 (TX PB6, RX PB7); `APP_USART_DMA=huart2` ist die normale
-  Ninebot-Halbduplex-Dashboard-Leitung (PA2), über die der Stock-COM9-Probe lief.
-  COM9 ist ohne physische Umverdrahtung oder ausdrücklich geplanten UART-Multiplexer
-  **nicht automatisch** der VESC-Tool-Port für die aktuelle Standardkonfiguration.
+- **Aktuelle VESC-Tool-Zuordnung:** `VESC_USART_DMA=huart3` nutzt BMS USART3
+  (TX PB10 / RX PB11), 115200 8N1. `APP_USART_DMA=huart2` bleibt die
+  Ninebot-Halbduplex-Dashboard-Leitung PA2. Das bewährte IoT-IAP mit USART1
+  PB6/PB7 bleibt davon getrennt. COM9 ist am IoT angeschlossen, nicht der BMS-Port.
 - Die G30-Firmware antwortet als VESC-FW **5.03** (`defines.h`); die früheren
   Dokumentangaben zu 6.06 beziehen sich auf Serialisierer-/Hostannahmen, nicht
   auf eine nachgewiesene VESC-Tool-Live-Verbindung. Firmwareversionswechsel
@@ -41,28 +42,27 @@ Commit `fc6d7389bfcf8b086c70954ebfaa5491e98cfd31`:
 [Recovery-Audit](https://github.com/ZachWay9bot/SmartESC_STM32_v21b/actions/runs/40130747514)
 alle erfolgreich. **Keiner dieser Erfolge beweist elektrische Hardwaretauglichkeit.**
 
-### Entscheidend: KEIN FLASH über COM9 vor Rückweg-Nachweis
+### Entscheidend: IoT-IAP beibehalten, Zielhardware-Rückweg vor Flash bestätigen
 
 Im wirklich aktiven SmartESC-Source verwendet `common_files/src/g30_recovery_iap.c`
 bei Frühstart `uart_init_rec()` **USART1 auf PB6/PB7** (AFIO-Remap);
 `g30p/Src/main.c` und `common_files/inc/product.h` benutzen für die
 gewöhnliche Stock-Dashboard-Eindrahtleitung dagegen **USART2/PA2**.
 
-Der aktuell erfolgreiche Stock-Test `N4GEA1601C0001` / `0x0187` ist auf
-der Ninebot-Leitung COM9 erfolgt. Aus diesem Test **folgt nicht**, dass die
-SmartESC-Frühstart-Recovery über dieselbe Leitung erreichbar wäre. Ebenso
-liegt hier kein Zielhardware-Nachweis vor, dass der unabhängige Stock-Loader
-die App nach einem Bootfehler selbstständig über PA2 wiederherstellen kann.
+Der aktuell erfolgreiche Stock-Test `N4GEA1601C0001` / `0x0187` lief auf
+**IoT/COM9**. Nach der expliziten Hardwarezuordnung ist dieser Weg tatsächlich
+USART1 PB6/PB7 und damit derselbe UART, den die unveränderte SmartESC-
+Frühstart-Recovery benutzt. Ein **unabhängiger Stock-IAP-Restore nach einem
+komplett nichtstartenden SmartESC-Image** ist für die aktuelle Hardware
+aber weiterhin nicht durch Live-Messung nachgewiesen.
 Die gegenwärtige lokale Agent-Software v0.6.0 ist außerdem auf
 `XBOTFOxx`-Applikationsversionen zugeschnitten, nicht auf eine echte
 Stock-DRV1.8.7-basierte SmartESC-IAP-Sitzung.
 
 **Daher kein automatisches Installieren des Bench-Drivers auf dem neuen
-vergossenen Controller.** Eine eigene VESC-Tool-UART-Verkabelung PB6/PB7
-ist nur relevant, falls diese Pads/Leitungen tatsächlich zugänglich sind.
-Eine Dual-Protokoll-Umschaltung der einzigen PA2-Leitung könnte VESC Tool
-und Rückflashpfad koppeln; das wäre eine relevante UART-/IAP-Änderung mit
-erneutem FO91-Lockout-Risiko und bedarf ausdrücklicher Vorabfreigabe.
+vergossenen Controller ohne Rückweg-Nachweis.** BMS PB10/PB11 ist der
+getrennte VESC-Tool-Weg; ein PA2-Protokollmultiplexer ist weder erforderlich
+noch beauftragt. IoT PB6/PB7 behält die bisherige Recovery-Konfiguration.
 
 ### Neuester G30-Bench-Kandidat: Coast-only und VESC-Allocator
 
@@ -85,10 +85,11 @@ SmartESC `b6fda7ec8830ca53a7ceb8d20bad55ea6c83ebaf`:
 - Das aktuelle Build-Artefakt heißt `SmartESC-G30-BENCH-271`. Es ist ein
   **nicht hardwarequalifizierter Kandidat**, kein freigegebenes Fahrimage.
 
-Noch nicht umgesetzt: VESC-Tool-UART über die vorhandene Ninebot-PA2-Leitung
-bei gleichzeitigem stock Dashboard; der potentielle Multiplexer wäre eine
-Änderung am Live-Kommunikationspfad mit DMA-/Heap-/IAP-Risiko und muss
-gegen die Alternative getrennter PB6/PB7-UART abgewogen werden.
+**Am 24.10. erledigt:** Statt eines PA2-Multiplexers nutzt VESC Tool die
+zugängliche BMS-UART-Leitung USART3 PB10/PB11. Im IoT/IAP-Pfad auf
+USART1 PB6/PB7 und im Dashboard-Pfad USART2 PA2 wurde nichts geändert.
+Die oben genannten früheren Kandidaten bleiben historische Referenzen;
+aktuell ist ausschließlich Build `SmartESC-G30-BENCH-274` zu betrachten.
 
 
 
