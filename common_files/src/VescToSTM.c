@@ -270,10 +270,18 @@ void VescToSTM_set_open_loop_erpm(int16_t erpm){
 }
 
 
-const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 uint8_t VescToSTM_get_uid(uint8_t * ptr, uint8_t size){
 	if(size>12) size=12;
+#ifdef G30P
+	/* STM32F103: 96-bit factory-programmed UID at 0x1FFFF7E8.
+	 * VESC Tool must identify the actual 3-Cap, not a shared test UUID.
+	 * Read-only silicon ROM area; no IAP/flash or motor state is touched. */
+	const uint8_t * uid = (const uint8_t *)0x1FFFF7E8u;
+	memcpy(ptr, uid, size);
+#else
+	const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 	memcpy(ptr, test, size);
+#endif
 	return size;
 }
 
