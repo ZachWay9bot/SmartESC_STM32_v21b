@@ -38,8 +38,17 @@ struct __PACKET_STATE_t__ {
     unsigned char *rx_buffer;
     port_str *port;
 };
-void *pvPortMalloc(size_t n) { return malloc(n); }
-void vPortFree(void *p) { free(p); }
+static int alloc_attempts, fail_at, live_allocations;
+void *pvPortMalloc(size_t n) {
+    alloc_attempts++;
+    if (fail_at && alloc_attempts == fail_at) return NULL;
+    void *p = malloc(n);
+    if (p) live_allocations++;
+    return p;
+}
+void vPortFree(void *p) {
+    if (p) { free(p); live_allocations--; }
+}
 
 /* CRC16 implementation of the stock VESC polynomial (crc.c uses STM32
  * peripherals only for CRC32, so port its CRC16 math here). */
@@ -135,6 +144,17 @@ static int oversize_and_empty(PACKET_STATE_t *s) {
 }
 int main(void) {
     port_str p={0};
+    /* Both FreeRTOS allocation failure points must return NULL and leave
+     * no leaked state or attempted NULL dereference. */
+    packet_free(NULL);
+    for (int fail = 1; fail <= 2; ++fail) {
+        alloc_attempts = 0;
+        fail_at = fail;
+        PACKET_STATE_t *failed = packet_init(on_send,on_receive,&p);
+        if (failed != NULL || live_allocations != 0) return 2 + fail;
+    }
+    alloc_attempts = 0;
+    fail_at = 0;
     PACKET_STATE_t *s=packet_init(on_send,on_receive,&p);
     if(!s || !s->rx_buffer)return 1;
     for(unsigned i=0;i<4u;i++) {
@@ -150,7 +170,8 @@ int main(void) {
     x=oversize_and_empty(s);
     if(x){fprintf(stderr,"oversize: %d\n",x);return 40+x;}
     packet_free(s);
-    puts("G30 packet.c fragmented/invalid stream tests OK");
+    if (live_allocations != 0) return 5;
+    puts("G30 packet.c fragmented/invalid stream and OOM tests OK");
     return 0;
 }
 """
