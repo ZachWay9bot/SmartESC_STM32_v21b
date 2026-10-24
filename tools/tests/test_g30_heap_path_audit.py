@@ -25,14 +25,14 @@ class G30HeapPathAudit(unittest.TestCase):
         paths = {path["id"]: path for path in report["paths"]}
         self.assertEqual(report["known_paths_examined"], 7)
         self.assertTrue(report["not_runtime_measurement"])
-        for ident in ("packet_state", "packet_rx_buffer",
-                      "dashboard_uart_rx", "dashboard_task_create"):
+        for ident in ("dashboard_uart_rx", "dashboard_task_create"):
             with self.subTest(ident=ident):
                 self.assertIn(ident, paths)
                 self.assertFalse(paths[ident]["guarded_before_use"])
                 self.assertIn(ident, report["unguarded_paths"])
                 self.assertGreater(paths[ident]["line"], 0)
-        for ident in ("vesc_send_mcconf", "vesc_send_appconf",
+        for ident in ("packet_state", "packet_rx_buffer",
+                      "vesc_send_mcconf", "vesc_send_appconf",
                       "detect_task_create"):
             with self.subTest(ident=ident):
                 self.assertTrue(paths[ident]["guarded_before_use"])
