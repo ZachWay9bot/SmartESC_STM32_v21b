@@ -405,6 +405,12 @@ void VescToSTM_set_brake_current_rel(float val) {
 }
 
 void VescToSTM_set_brake_rel_int(int32_t val){
+#ifdef G30P
+	/* G30 coast-only policy: brake requests cannot generate torque or regen. */
+	(void)val;
+	VescToSTM_set_brake(0);
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -424,9 +430,18 @@ void VescToSTM_set_brake_rel_int(int32_t val){
 	SpeednTorqCtrlM1.PISpeed->wUpperIntegralLimit = p_q * SP_KIDIV;
 	SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = n_q * SP_KIDIV;
 	MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
+#endif
 }
 
 void VescToSTM_set_brake(int32_t current){
+#ifdef G30P
+	(void)current;
+	VescToSTM_mode = STM_STATE_BRAKE;
+	VescToSTM_set_open_loop(false, 0, 0);
+	VescToSTM_set_current(0.0f, 0.0f);
+	VescToSTM_pwm_stop();
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -450,6 +465,7 @@ void VescToSTM_set_brake(int32_t current){
 		SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = q * SP_KIDIV;
 		MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
 	}
+#endif
 }
 
 
