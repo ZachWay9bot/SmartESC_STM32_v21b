@@ -23,6 +23,8 @@
 #include "stm32f1xx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "FreeRTOS.h"
+#include "task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,15 +67,44 @@ extern DMA_HandleTypeDef hdma_usart3_rx;
 extern TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN EV */
-
+extern void xPortSysTickHandler(void);
 /* USER CODE END EV */
 
 /******************************************************************************/
 /*           Cortex-M3 Processor Interruption and Exception Handlers          */
 /******************************************************************************/
 /**
-  * @brief This function handles System service call via SWI instruction.
+  * @brief This function handles the system tick.
+  *
+  * HAL_Init() enables SysTick before the FreeRTOS scheduler starts, and main()
+  * uses HAL_Delay() during early initialization. Keep HAL's millisecond tick
+  * alive before the scheduler. Once FreeRTOS is running, forward every RTOS
+  * tick to the port handler and divide the 2 kHz RTOS tick down to a 1 kHz
+  * HAL timebase.
   */
+void SysTick_Handler(void)
+{
+  static uint32_t hal_tick_divider = 0U;
+
+  if (xTaskGetSchedulerState() == taskSCHEDULER_NOT_STARTED)
+  {
+    HAL_IncTick();
+    return;
+  }
+
+#if (configTICK_RATE_HZ >= 1000)
+  hal_tick_divider++;
+  if (hal_tick_divider >= (uint32_t)(configTICK_RATE_HZ / 1000U))
+  {
+    hal_tick_divider = 0U;
+    HAL_IncTick();
+  }
+#else
+  HAL_IncTick();
+#endif
+
+  xPortSysTickHandler();
+}
 
 
 /******************************************************************************/
