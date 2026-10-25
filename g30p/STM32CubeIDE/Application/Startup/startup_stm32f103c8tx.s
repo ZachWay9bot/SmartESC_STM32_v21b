@@ -237,12 +237,11 @@ PendSV_Handler:
   b xPortPendSVHandler
   .size PendSV_Handler, .-PendSV_Handler
 
-  .global SysTick_Handler
-  .type SysTick_Handler, %function
-  .thumb_func
-SysTick_Handler:
-  b xPortSysTickHandler
-  .size SysTick_Handler, .-SysTick_Handler
+  /* SysTick is provided by stm32f1xx_it.c so HAL timekeeping remains
+   * alive before the FreeRTOS scheduler starts. The C handler forwards to
+   * xPortSysTickHandler only after the scheduler is running. */
+  .weak SysTick_Handler
+  .thumb_set SysTick_Handler,Default_Handler
 
   .weak WWDG_IRQHandler
   .thumb_set WWDG_IRQHandler,Default_Handler
