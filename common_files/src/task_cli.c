@@ -89,10 +89,11 @@ void task_cli(void * argument)
 
 	/* USART was already fully initialized by MX_USARTx_UART_Init(). Do not
 	 * re-run MSP/DMA setup here. Poll one byte at a time; this also clears and
-	 * recovers UART error conditions through the HAL receive path. */
-	VescToSTM_set_brake_rel_int(0);
-	app_check_timer();
-
+	 * recovers UART error conditions through the HAL receive path.
+	 *
+	 * G30 communication starts before MCSDK motor initialization. Until
+	 * g30_runtime_ready becomes true, only the packet transport is active. */
+	bool runtime_comm_initialized = false;
 	uint16_t slow_update_cnt=0;
 	for(;;)
 	{
@@ -100,9 +101,17 @@ void task_cli(void * argument)
 			packet_process_byte(rx_byte, port->phandle);
 		}
 
-		VescToSTM_handle_timeout();
+		if (g30_runtime_ready && !runtime_comm_initialized) {
+			VescToSTM_set_brake_rel_int(0);
+			app_check_timer();
+			runtime_comm_initialized = true;
+		}
 
-		if(appconf.app_to_use == APP_ADC_UART){
+		if (g30_runtime_ready) {
+			VescToSTM_handle_timeout();
+		}
+
+		if(g30_runtime_ready && appconf.app_to_use == APP_ADC_UART){
 			app_check_timer();
 			if(slow_update_cnt==0){
 				if(m365_to_display.mode & 0x40){

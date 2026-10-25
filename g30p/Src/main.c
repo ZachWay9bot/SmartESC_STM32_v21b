@@ -91,6 +91,20 @@ static void MX_NVIC_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+static void G30_RuntimeInitTask(void *argument)
+{
+  (void)argument;
+
+  /* Keep VESC communication schedulable while MCSDK performs its hardware
+   * initialization. If MCSDK stalls, FW_VERSION remains reachable. */
+  MX_MotorControl_Init();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  conf_general_init();
+  task_runtime_init();
+
+  vTaskDelete(NULL);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -135,10 +149,15 @@ int main(void)
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-  MX_MotorControl_Init();
-  HAL_Delay(100);
-  task_init();
-  conf_general_init();
+  /* Bring communications up first. Motor-control initialization runs in a
+   * lower-priority task after the scheduler starts, so VESC FW_VERSION can be
+   * served even if MCSDK initialization blocks or faults later. */
+  task_comm_init();
+  if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
+                  PRIO_BELOW_NORMAL, NULL) != pdPASS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
