@@ -1,4 +1,4 @@
-name: Build G30 NativeDash on commit
+name: Build G30 Bench UART-IAP on commit
 
 on:
   push:
@@ -17,7 +17,7 @@ on:
       - '.github/workflows/**'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   g30:
@@ -31,55 +31,77 @@ jobs:
           entrypoint: /opt/stm32cubeide/stm32cubeide
           args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
 
-      - name: Build SHU package
+      - name: Verify linked scheduler vectors and communication task startup
         run: |
-          python3 tools/make_shu_zip.py \
+          python3 tools/audit_g30_startup.py \
+            --elf g30p/STM32CubeIDE/Debug/g30p.elf \
+            --json-out g30-startup-audit.json
+
+      - name: Audit linked G30 SRAM allocation (read only)
+        run: |
+          python3 tools/audit_g30_ram.py \
+            --elf g30p/STM32CubeIDE/Debug/g30p.elf \
+            --json-out g30-ram-audit.json
+
+      # Review known FreeRTOS allocations WITHOUT modifying firmware.
+      # Unguarded sites are reported as findings; no live heap claim.
+      - name: Audit G30 FreeRTOS heap allocation paths (read only)
+        run: |
+          python3 tools/audit_g30_heap_paths.py --json-out g30-heap-audit.json
+
+      # Current development bench has no dashboard: build an encrypted UART
+      # IAP test payload, reusing the *unchanged* NinebotTEA encoding.
+      # This creates artifacts only; it never flashes hardware or publishes
+      # firmware into the repository/default branch.
+      - name: Build BENCH UART-IAP candidate (no SHU)
+        run: |
+          python3 tools/make_bench_iap.py \
             g30p/STM32CubeIDE/Debug/g30p.bin \
-            SmartESC_G30_NativeDash_v0.8.7_SHU.zip \
-            --name "SmartESC G30 NativeDash v0.8.7"
-
-      - name: Prepare versioned IAP payload
-        run: |
-          mkdir -p firmware/v0.8.7
-          cp SmartESC_G30_NativeDash_v0.8.7_SHU.zip firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
-          python3 - <<'PY'
-          import zipfile
-          z = zipfile.ZipFile('SmartESC_G30_NativeDash_v0.8.7_SHU.zip', 'r')
-          data = z.read('FIRM.bin.enc')
-          open('firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin', 'wb').write(data)
-          print('IAP Driver.bin:', len(data), 'bytes')
-          PY
-          (cd firmware/v0.8.7 && sha256sum SmartESC_G30_NativeDash_v0.8.7_SHU.zip SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin > SHA256SUMS.txt)
+            SmartESC_G30_BENCH_IAP_Driver.bin \
+            --manifest SmartESC_G30_BENCH_MANIFEST.json
           {
-            echo "SmartESC G30 NativeDash v0.8.7"
+            echo "BENCH TEST CANDIDATE - NOT MOTOR TESTED"
             echo "Source commit: ${GITHUB_SHA}"
-            echo "Workflow run: ${GITHUB_RUN_NUMBER}"
-            echo "Built: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            wc -c firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
-            wc -c firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
-          } > firmware/v0.8.7/BUILD_INFO.txt
+            echo "Build: ${GITHUB_RUN_ID}"
+            echo "Date UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Format: encrypted UART-IAP Driver.bin, no SHU ZIP"
+          } > SmartESC_G30_BENCH_BUILD_INFO.txt
 
-      - name: Publish v0.8.7 binaries to repository
-        if: github.event_name == 'push' && github.ref == 'refs/heads/vesc_comp'
+      # Independent *offline* check of artifact identity; no UART or flash.
+      - name: Verify BIN, encrypted UART-IAP and manifest agree
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_SHU.zip
-          git add firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
-          git add firmware/v0.8.7/SHA256SUMS.txt firmware/v0.8.7/BUILD_INFO.txt
-          if ! git diff --cached --quiet; then
-            git commit -m "firmware: publish v0.8.7 SHU and IAP binaries [skip ci]"
-            git push origin HEAD:vesc_comp
-          fi
+          python3 tools/verify_g30_bench_artifacts.py \
+            g30p/STM32CubeIDE/Debug/g30p.bin \
+            SmartESC_G30_BENCH_IAP_Driver.bin \
+            SmartESC_G30_BENCH_MANIFEST.json \
+            --json-out SmartESC_G30_BENCH_VERIFY.json
 
-      - name: Upload G30 artifacts
+      - name: Upload G30 bench binaries and build evidence
         uses: actions/upload-artifact@v4
         with:
-          name: SmartESC-G30-NativeDash-${{ github.run_number }}
+          name: SmartESC-G30-BENCH-${{ github.run_number }}
           retention-days: 30
+          if-no-files-found: error
           path: |
             g30p/STM32CubeIDE/Debug/g30p.bin
             g30p/STM32CubeIDE/Debug/g30p.elf
             g30p/STM32CubeIDE/Debug/g30p.map
-            SmartESC_G30_NativeDash_v0.8.7_SHU.zip
-            firmware/v0.8.7/SmartESC_G30_NativeDash_v0.8.7_IAP_Driver.bin
+            SmartESC_G30_BENCH_IAP_Driver.bin
+            SmartESC_G30_BENCH_MANIFEST.json
+            SmartESC_G30_BENCH_VERIFY.json
+            SmartESC_G30_BENCH_BUILD_INFO.txt
+            g30-startup-audit.json
+
+      # Diagnostic artifacts remain available independently of the IAP build.
+      - name: Upload G30 SRAM and heap audits
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: G30-SRAM-audit-${{ github.run_number }}
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            g30-ram-audit.json
+            g30-heap-audit.json
+            g30-startup-audit.json
+

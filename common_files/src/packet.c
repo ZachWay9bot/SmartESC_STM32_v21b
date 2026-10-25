@@ -36,15 +36,23 @@ static int try_decode_packet(unsigned char *buffer, unsigned int in_len,
 
 PACKET_STATE_t * packet_init(void (*s_func)(unsigned char *data, unsigned int len, port_str * port), void (*p_func)(unsigned char *data, unsigned int len, PACKET_STATE_t *phandle), port_str * port) {
 	PACKET_STATE_t * ret = pvPortMalloc(sizeof(PACKET_STATE_t));
+	if (ret == NULL) {
+		return NULL;
+	}
 	memset(ret, 0, sizeof(PACKET_STATE_t));
 	ret->send_func = s_func;
 	ret->process_func = p_func;
 	ret->port = port;
 	ret->rx_buffer = pvPortMalloc(BUFFER_LEN);
+	if (ret->rx_buffer == NULL) {
+		vPortFree(ret);
+		return NULL;
+	}
 	return ret;
 }
 
 void packet_free(PACKET_STATE_t * handle){
+	if (handle == NULL) return;
 	vPortFree(handle->rx_buffer);
 	vPortFree(handle);
 }

@@ -1,0 +1,15 @@
+{
+  "_notice": "EVIDENCE TEMPLATE ONLY. DO NOT set booleans true without independent physical measurements and actual stock restore logs. This file is not release evidence.",
+  "board_profile": "G30_STM32F103_3CAP",
+  "bootloader_sha256": null,
+  "physical_flash_geometry": null,
+  "image_sha256": null,
+  "stock_image_sha256": null,
+  "restore_log_sha256": null,
+  "entrypoint": null,
+  "uart_wiring": null,
+  "independent_rescue": false,
+  "actual_restore_to_stock": false,
+  "witness": null,
+  "test_date": null
+}

@@ -37,6 +37,18 @@ port_str main_uart = {	.uart = &VESC_USART_DMA,
 						.half_duplex = false,
 						.task_handle = NULL
 };
+#ifdef G30P
+/* DRV126 transition build: keep BMS/USART3 as the canonical VESC Tool port,
+ * and expose the same VESC protocol on IoT/USART1 once normal application
+ * startup has completed. Early 3-second recovery still owns USART1 before
+ * this task is created, so the recovery path remains available. */
+port_str iot_uart = {	.uart = &huart1,
+					    .rx_buffer_size = 512,
+						.phandle = NULL,
+						.half_duplex = false,
+						.task_handle = NULL
+};
+#endif
 port_str aux_uart = {	.uart = &APP_USART_DMA,
 					    .rx_buffer_size = 128,
 						.phandle = NULL,
@@ -44,9 +56,32 @@ port_str aux_uart = {	.uart = &APP_USART_DMA,
 						.task_handle = NULL
 };
 
+#ifdef G30P
+volatile bool g30_runtime_ready = false;
+
+void task_comm_init(void){
+	task_cli_init(&main_uart);
+	task_cli_init(&iot_uart);
+}
+
+void task_runtime_init(void){
+	app_adc_init_timer();
+	task_LED_init(&main_uart);
+#if !defined(G30_NO_DASH) || (G30_NO_DASH == 0)
+	task_PWR_init(&main_uart);
+#endif
+	g30_runtime_ready = true;
+}
+#endif
+
 void task_init(){
+#ifdef G30P
+	task_comm_init();
+	task_runtime_init();
+#else
 	app_adc_init_timer();
 	task_cli_init(&main_uart);
 	task_LED_init(&main_uart);  //Bring up the blinky
 	task_PWR_init(&main_uart);  //Manage power button
+#endif
 }

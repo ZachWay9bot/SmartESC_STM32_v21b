@@ -2842,6 +2842,10 @@ BaseType_t xSwitchRequired = pdFALSE;
 #endif /* configUSE_APPLICATION_TASK_TAG */
 /*-----------------------------------------------------------*/
 
+#if defined( G30P )
+/* PendSV calls this symbol from inline assembly. Keep it visible under LTO. */
+void vTaskSwitchContext( void ) __attribute__((used, externally_visible));
+#endif
 void vTaskSwitchContext( void )
 {
 	if( uxSchedulerSuspended != ( UBaseType_t ) pdFALSE )

@@ -20,13 +20,6 @@ jobs:
           entrypoint: /opt/stm32cubeide/stm32cubeide
           args: --launcher.suppressErrors -nosplash -application org.eclipse.cdt.managedbuilder.core.headlessbuild -build g30p/Debug -importAll /github/workspace/
 
-      - name: Build SHU package
-        run: |
-          python3 tools/make_shu_zip.py \
-            g30p/STM32CubeIDE/Debug/g30p.bin \
-            SmartESC_G30_NativeDash_${GITHUB_REF_NAME}_SHU.zip \
-            --name "SmartESC G30 NativeDash ${GITHUB_REF_NAME}"
-
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -35,4 +28,3 @@ jobs:
           prerelease: true
           files: |
             g30p/STM32CubeIDE/Debug/g30p.bin
-            SmartESC_G30_NativeDash_${{ github.ref_name }}_SHU.zip

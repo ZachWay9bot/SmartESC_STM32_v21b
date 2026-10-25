@@ -367,7 +367,7 @@ __weak void R3_2_GetPhaseCurrents( PWMC_Handle_t * pHdl, ab_t* pStator_Currents 
   pHandle->_Super.Ib = pStator_Currents->b;
   pHandle->_Super.Ic = -pStator_Currents->a - pStator_Currents->b;
 
-  if(pHandle->_Super.OverCurrent && ((abs(pHandle->_Super.Ia) > pHandle->_Super.OverCurrent) || (abs(pHandle->_Super.Ia) > pHandle->_Super.OverCurrent) || (abs(pHandle->_Super.Ic) > pHandle->_Super.OverCurrent))){
+  if(pHandle->_Super.OverCurrent && ((abs(pHandle->_Super.Ia) > pHandle->_Super.OverCurrent) || (abs(pHandle->_Super.Ib) > pHandle->_Super.OverCurrent) || (abs(pHandle->_Super.Ic) > pHandle->_Super.OverCurrent))){
 	  pHandle->_Super.OverCurrentCyclesCounter++;
 	  if(pHandle->_Super.OverCurrentCyclesCounter > pHandle->_Super.OverCurrentCycles){
 		  pHandle->OverCurrentFlag = true;

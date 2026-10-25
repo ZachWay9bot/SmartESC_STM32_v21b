@@ -220,15 +220,26 @@ g_pfnVectors:
   .weak UsageFault_Handler
   .thumb_set UsageFault_Handler,Default_Handler
 
-  .weak SVC_Handler
-  .thumb_set SVC_Handler,Default_Handler
+  .global SVC_Handler
+  .type SVC_Handler, %function
+  .thumb_func
+SVC_Handler:
+  b vPortSVCHandler
+  .size SVC_Handler, .-SVC_Handler
 
   .weak DebugMon_Handler
   .thumb_set DebugMon_Handler,Default_Handler
 
-  .weak PendSV_Handler
-  .thumb_set PendSV_Handler,Default_Handler
+  .global PendSV_Handler
+  .type PendSV_Handler, %function
+  .thumb_func
+PendSV_Handler:
+  b xPortPendSVHandler
+  .size PendSV_Handler, .-PendSV_Handler
 
+  /* SysTick is provided by stm32f1xx_it.c so HAL timekeeping remains
+   * alive before the FreeRTOS scheduler starts. The C handler forwards to
+   * xPortSysTickHandler only after the scheduler is running. */
   .weak SysTick_Handler
   .thumb_set SysTick_Handler,Default_Handler
 
