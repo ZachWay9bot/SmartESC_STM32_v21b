@@ -45,15 +45,24 @@ uint32_t shutdown_limit = 0;
 
 uint8_t buttonState() {
     static const uint32_t DEBOUNCE_MILLIS = 20 ;
+#ifdef G30P
+    bool buttonstate = HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_RESET ;
+#else
     bool buttonstate = HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_SET ;
+#endif
     uint32_t buttonstate_ts = HAL_GetTick() ;
 
     uint32_t now = HAL_GetTick() ;
     if( now - buttonstate_ts > DEBOUNCE_MILLIS )
     {
-        if( buttonstate != (HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_SET))
+#ifdef G30P
+        bool sampled = HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_RESET ;
+#else
+        bool sampled = HAL_GPIO_ReadPin( PWR_BTN_GPIO_Port, PWR_BTN_Pin ) == GPIO_PIN_SET ;
+#endif
+        if( buttonstate != sampled )
         {
-            buttonstate = !buttonstate ;
+            buttonstate = sampled ;
             buttonstate_ts = now ;
         }
     }
