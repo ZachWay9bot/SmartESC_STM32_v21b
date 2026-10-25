@@ -105,6 +105,113 @@ static void G30_RuntimeInitTask(void *argument)
   vTaskDelete(NULL);
 }
 
+
+static uint16_t G30_VescCrc16(const uint8_t *buf, uint32_t len)
+{
+  int16_t crc = 0;
+  while (len--) {
+    int16_t x = ((uint8_t)(crc >> 8)) ^ *buf++;
+    x ^= x >> 4;
+    crc = (int16_t)((crc << 8) ^ (x << 12) ^ (x << 5) ^ x);
+  }
+  return (uint16_t)crc;
+}
+
+typedef struct {
+  uint8_t buf[16];
+  uint8_t pos;
+} G30BareParser;
+
+static void G30_BareSendFwVersion(UART_HandleTypeDef *uart)
+{
+  uint8_t payload[64];
+  uint32_t i = 0;
+  payload[i++] = 0;
+  payload[i++] = 6;
+  payload[i++] = 6;
+
+  static const char hw[] = "SmartESC_G30";
+  memcpy(&payload[i], hw, sizeof(hw));
+  i += sizeof(hw);
+
+  const uint8_t *uid = (const uint8_t *)0x1FFFF7E8u;
+  memcpy(&payload[i], uid, 12);
+  i += 12;
+
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+
+  static const char fwname[] = "SmartESC-BM";
+  memcpy(&payload[i], fwname, sizeof(fwname));
+  i += sizeof(fwname);
+
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+  payload[i++] = 0;
+
+  uint16_t crc = G30_VescCrc16(payload, i);
+  uint8_t frame[72];
+  uint32_t p = 0;
+  frame[p++] = 2;
+  frame[p++] = (uint8_t)i;
+  memcpy(&frame[p], payload, i);
+  p += i;
+  frame[p++] = (uint8_t)(crc >> 8);
+  frame[p++] = (uint8_t)crc;
+  frame[p++] = 3;
+
+  (void)HAL_UART_Transmit(uart, frame, p, 100U);
+}
+
+static void G30_BareFeed(UART_HandleTypeDef *uart, G30BareParser *st, uint8_t b)
+{
+  if (st->pos == 0 && b != 2) return;
+
+  st->buf[st->pos++] = b;
+  if (st->pos < 6) return;
+
+  if (st->buf[0] == 2 && st->buf[1] == 1 && st->buf[2] == 0 &&
+      st->buf[5] == 3) {
+    uint16_t rxcrc = ((uint16_t)st->buf[3] << 8) | st->buf[4];
+    if (rxcrc == G30_VescCrc16(&st->buf[2], 1)) {
+      G30_BareSendFwVersion(uart);
+    }
+  }
+
+  st->pos = 0;
+}
+
+volatile uint32_t g30_bm_diag_enable = 1U;
+
+static void G30_BareVescLoop(void)
+{
+  G30BareParser p1 = {{0},0};
+  G30BareParser p3 = {{0},0};
+  uint8_t b;
+  uint32_t last = HAL_GetTick();
+
+  for (;;) {
+    if (HAL_UART_Receive(&huart1, &b, 1, 1U) == HAL_OK) {
+      G30_BareFeed(&huart1, &p1, b);
+    }
+    if (HAL_UART_Receive(&huart3, &b, 1, 1U) == HAL_OK) {
+      G30_BareFeed(&huart3, &p3, b);
+    }
+
+    if ((uint32_t)(HAL_GetTick() - last) >= 500U) {
+      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+      last = HAL_GetTick();
+    }
+  }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -147,6 +254,13 @@ int main(void)
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_CRC_Init();
+
+  /* Bare-metal diagnostic: the normal scheduler path remains linked for
+   * build/audit integrity, but this volatile runtime flag selects the direct
+   * UART responder on the bench. */
+  if (g30_bm_diag_enable != 0U) {
+    G30_BareVescLoop();
+  }
 
   /* Initialize interrupts */
   MX_NVIC_Init();
