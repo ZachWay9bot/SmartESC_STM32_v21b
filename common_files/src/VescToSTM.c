@@ -120,7 +120,7 @@ int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 	uint16_t temp = NTC_GetAvTemp_d(pMCT[M1]->pTemperatureSensor);
 	if(temp < fp.temp_cut_start){
 		app_adc_set_mode(M365_MODE_TEMP);
-		iq = utils_map_int(temp, fp.temp_cut_start, fp.battery_cut_end, 0, iq);
+		iq = utils_map_int(temp, fp.temp_cut_start, fp.temp_cut_end, 0, iq);
 	}else{
 		app_adc_clear_mode(M365_MODE_TEMP);
 	}
@@ -270,10 +270,18 @@ void VescToSTM_set_open_loop_erpm(int16_t erpm){
 }
 
 
-const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 uint8_t VescToSTM_get_uid(uint8_t * ptr, uint8_t size){
 	if(size>12) size=12;
+#ifdef G30P
+	/* STM32F103: 96-bit factory-programmed UID at 0x1FFFF7E8.
+	 * VESC Tool must identify the actual 3-Cap, not a shared test UUID.
+	 * Read-only silicon ROM area; no IAP/flash or motor state is touched. */
+	const uint8_t * uid = (const uint8_t *)0x1FFFF7E8u;
+	memcpy(ptr, uid, size);
+#else
+	const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 	memcpy(ptr, test, size);
+#endif
 	return size;
 }
 
@@ -405,6 +413,12 @@ void VescToSTM_set_brake_current_rel(float val) {
 }
 
 void VescToSTM_set_brake_rel_int(int32_t val){
+#ifdef G30P
+	/* G30 coast-only policy: brake requests cannot generate torque or regen. */
+	(void)val;
+	VescToSTM_set_brake(0);
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -424,9 +438,18 @@ void VescToSTM_set_brake_rel_int(int32_t val){
 	SpeednTorqCtrlM1.PISpeed->wUpperIntegralLimit = p_q * SP_KIDIV;
 	SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = n_q * SP_KIDIV;
 	MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
+#endif
 }
 
 void VescToSTM_set_brake(int32_t current){
+#ifdef G30P
+	(void)current;
+	VescToSTM_mode = STM_STATE_BRAKE;
+	VescToSTM_set_open_loop(false, 0, 0);
+	VescToSTM_set_current(0.0f, 0.0f);
+	VescToSTM_pwm_stop();
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -450,6 +473,7 @@ void VescToSTM_set_brake(int32_t current){
 		SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = q * SP_KIDIV;
 		MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
 	}
+#endif
 }
 
 

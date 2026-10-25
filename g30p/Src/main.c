@@ -91,6 +91,20 @@ static void MX_NVIC_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+static void G30_RuntimeInitTask(void *argument)
+{
+  (void)argument;
+
+  /* Keep VESC communication schedulable while MCSDK performs its hardware
+   * initialization. If MCSDK stalls, FW_VERSION remains reachable. */
+  MX_MotorControl_Init();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  conf_general_init();
+  task_runtime_init();
+
+  vTaskDelete(NULL);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -121,7 +135,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+#if !defined(G30_NO_DASH) || (G30_NO_DASH == 0)
   G30Recovery_CheckAndRun();
+#endif
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
@@ -135,14 +151,20 @@ int main(void)
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-  MX_MotorControl_Init();
-  HAL_Delay(100);
-  conf_general_init();
+  /* Bring communications up first. Motor-control initialization runs in a
+   * lower-priority task after the scheduler starts, so VESC FW_VERSION can be
+   * served even if MCSDK initialization blocks or faults later. */
+  task_comm_init();
+  if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
+                  PRIO_BELOW_NORMAL, NULL) != pdPASS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  vTaskSwitchContext();
+  vTaskStartScheduler();
   while (1)
   {
     /* USER CODE END WHILE */
@@ -699,7 +721,13 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PWR_BTN_Pin */
   GPIO_InitStruct.Pin = PWR_BTN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+#if defined(G30_NO_DASH) && (G30_NO_DASH == 1)
+  /* No dashboard means PC14 has no valid external button source. Keep it at
+   * a deterministic released level instead of leaving the input floating. */
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+#else
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+#endif
   HAL_GPIO_Init(PWR_BTN_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : UNUSED4_Pin */
@@ -806,3 +834,4 @@ void assert_failed(uint8_t *file, uint32_t line)
 #endif /* USE_FULL_ASSERT */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
+

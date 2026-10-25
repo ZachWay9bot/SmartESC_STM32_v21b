@@ -57,7 +57,11 @@
 #define configSUPPORT_STATIC_ALLOCATION          0
 #define configSUPPORT_DYNAMIC_ALLOCATION         1
 #define configUSE_IDLE_HOOK                      0
+#ifdef G30P
+#define configUSE_TICK_HOOK                      1
+#else
 #define configUSE_TICK_HOOK                      0
+#endif
 #define configCPU_CLOCK_HZ                       ( CPU_MHZ )
 #define configTICK_RATE_HZ                       ((TickType_t)2000)
 #define configMAX_PRIORITIES                     ( 16 )
@@ -135,7 +139,9 @@ header file. */
 /* USER CODE END 1 */
 
 /* Definitions that map the FreeRTOS port interrupt handlers to their CMSIS
-standard names. */
+standard names. On G30P the startup file provides strong, non-LTO exception
+trampolines and therefore the native FreeRTOS handler names must remain visible. */
+#if !defined(G30P)
 #define vPortSVCHandler    SVC_Handler
 #define xPortPendSVHandler PendSV_Handler
 
@@ -143,9 +149,11 @@ standard names. */
               to prevent overwriting SysTick_Handler defined within STM32Cube HAL */
 
 #define xPortSysTickHandler SysTick_Handler
+#endif
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */
+
