@@ -135,7 +135,9 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+#if !defined(G30_NO_DASH) || (G30_NO_DASH == 0)
   G30Recovery_CheckAndRun();
+#endif
   MX_DMA_Init();
   MX_ADC1_Init();
   MX_ADC2_Init();
@@ -719,7 +721,13 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin : PWR_BTN_Pin */
   GPIO_InitStruct.Pin = PWR_BTN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+#if defined(G30_NO_DASH) && (G30_NO_DASH == 1)
+  /* No dashboard means PC14 has no valid external button source. Keep it at
+   * a deterministic released level instead of leaving the input floating. */
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+#else
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+#endif
   HAL_GPIO_Init(PWR_BTN_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : UNUSED4_Pin */
