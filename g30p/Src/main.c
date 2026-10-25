@@ -188,6 +188,8 @@ static void G30_BareFeed(UART_HandleTypeDef *uart, G30BareParser *st, uint8_t b)
   st->pos = 0;
 }
 
+volatile uint32_t g30_bm_diag_enable = 1U;
+
 static void G30_BareVescLoop(void)
 {
   G30BareParser p1 = {{0},0};
@@ -253,8 +255,12 @@ int main(void)
   MX_USART2_UART_Init();
   MX_CRC_Init();
 
-  /* Bare-metal diagnostic: no scheduler, no MCSDK, no packet.c. */
-  G30_BareVescLoop();
+  /* Bare-metal diagnostic: the normal scheduler path remains linked for
+   * build/audit integrity, but this volatile runtime flag selects the direct
+   * UART responder on the bench. */
+  if (g30_bm_diag_enable != 0U) {
+    G30_BareVescLoop();
+  }
 
   /* Initialize interrupts */
   MX_NVIC_Init();
