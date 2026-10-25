@@ -92,16 +92,18 @@ void SysTick_Handler(void)
     return;
   }
 
-#if (configTICK_RATE_HZ >= 1000)
+  uint32_t hal_ticks_per_ms = (uint32_t)configTICK_RATE_HZ / 1000U;
+  if (hal_ticks_per_ms == 0U)
+  {
+    hal_ticks_per_ms = 1U;
+  }
+
   hal_tick_divider++;
-  if (hal_tick_divider >= (uint32_t)(configTICK_RATE_HZ / 1000U))
+  if (hal_tick_divider >= hal_ticks_per_ms)
   {
     hal_tick_divider = 0U;
     HAL_IncTick();
   }
-#else
-  HAL_IncTick();
-#endif
 
   xPortSysTickHandler();
 }
