@@ -67,7 +67,9 @@ void task_comm_init(void){
 void task_runtime_init(void){
 	app_adc_init_timer();
 	task_LED_init(&main_uart);
+#if !defined(G30_NO_DASH) || (G30_NO_DASH == 0)
 	task_PWR_init(&main_uart);
+#endif
 	g30_runtime_ready = true;
 }
 #endif

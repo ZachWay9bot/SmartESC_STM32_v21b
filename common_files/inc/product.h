@@ -10,6 +10,10 @@
 
 #ifdef G30P
 
+/* Bench configuration: no dashboard attached, therefore PC14 power-button
+ * state is not a valid recovery/shutdown input. */
+#define G30_NO_DASH 1
+
 /* G30 3-Cap port contract: BMS PB10/PB11 = VESC Tool (USART3),
  * IoT PB6/PB7 = unchanged original UART-IAP / early recovery (USART1),
  * yellow dashboard PA2 = half-duplex Ninebot protocol (USART2).
