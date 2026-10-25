@@ -257,10 +257,12 @@ static void dispatch(const rec_frame_t *f) {
 }
 
 void G30Recovery_CheckAndRun(void) {
-    if (HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port,PWR_BTN_Pin)!=GPIO_PIN_SET) return;
+    /* G30 power button is active-low: released = HIGH, pressed = LOW.
+     * Enter recovery only when the button is actually held low for 3 s. */
+    if (HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port,PWR_BTN_Pin)!=GPIO_PIN_RESET) return;
     uint32_t t0=HAL_GetTick();
     while ((uint32_t)(HAL_GetTick()-t0)<3000u) {
-        if (HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port,PWR_BTN_Pin)!=GPIO_PIN_SET) return;
+        if (HAL_GPIO_ReadPin(PWR_BTN_GPIO_Port,PWR_BTN_Pin)!=GPIO_PIN_RESET) return;
     }
 
     /* Hard recovery mode: power held, bridge never initialized or armed. */
