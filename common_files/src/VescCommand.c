@@ -41,6 +41,7 @@
 #include "terminal.h"
 #include "product.h"
 #include "app.h"
+#include "task_init.h"
 #include "ninebot.h"
 
 
@@ -335,6 +336,13 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     data++;
     len--;
     send_func = reply_func;
+
+    /* Communication comes up before MCSDK runtime on G30. Until the motor
+     * runtime is ready, answer only FW_VERSION and ignore all motor/config
+     * commands so VESC Tool can establish a transport connection safely. */
+    if (!g30_runtime_ready && packet_id != COMM_FW_VERSION) {
+        return;
+    }
 
     if (g30_detect_active &&
         packet_id != COMM_ALIVE &&
