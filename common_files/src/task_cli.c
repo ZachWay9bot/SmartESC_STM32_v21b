@@ -26,6 +26,7 @@
 #include "task_init.h"
 #ifdef G30P
 #include "g30_recovery_iap.h"
+extern void G30_DiagVescFrameSeen(void);
 /* v0.4.6 USART1 IRQ/ring-buffer transport, implemented in stm32f1xx_it.c */
 extern void G30_UART1_RxStart(void);
 extern int G30_UART1_Getc(void);
@@ -72,6 +73,10 @@ void comm_uart_send_packet(unsigned char *data, unsigned int len, PACKET_STATE_t
 }
 
 void process_packet(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle){
+#ifdef G30P
+    /* packet.c invokes this only after a complete CRC-valid VESC frame. */
+    G30_DiagVescFrameSeen();
+#endif
 	commands_process_packet(data, len, &comm_uart_send_packet, phandle);
 }
 
