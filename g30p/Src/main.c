@@ -796,13 +796,37 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
+/* Fail-stop LED diagnostics before or after FreeRTOS scheduler startup.
+ * DWT counter is local to this routine and does not require SysTick or IRQs.
+ * Output assumes PA15 was configured by MX_GPIO_Init.  No IAP access. */
+static void g30_error_led_wait(uint32_t milliseconds)
+{
+  uint32_t hz = SystemCoreClock ? SystemCoreClock : 8000000u;
+  uint32_t span = (hz / 1000u) * milliseconds;
+  uint32_t start = DWT->CYCCNT;
+  while ((uint32_t)(DWT->CYCCNT - start) < span) { }
+}
+
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0u;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  /* 2 s ON, 6 flashes, 2 s OFF; no reset, flash, or motor action. */
+  for (;;) {
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    g30_error_led_wait(2000u);
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+    g30_error_led_wait(250u);
+    for (unsigned i=0u; i<6u; ++i) {
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+      g30_error_led_wait(180u);
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+      g30_error_led_wait(230u);
+    }
+    g30_error_led_wait(2000u);
   }
   /* USER CODE END Error_Handler_Debug */
 }
