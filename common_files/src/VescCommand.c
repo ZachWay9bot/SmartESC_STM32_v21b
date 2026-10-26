@@ -40,6 +40,9 @@
 #include <printf.h>
 #include "terminal.h"
 #include "product.h"
+#ifdef G30P
+#include "task_init.h"
+#endif
 #include "app.h"
 #include "ninebot.h"
 
