@@ -181,6 +181,45 @@ void TIM4_IRQHandler(void)
   /* USER CODE END TIM4_IRQn 1 */
 }
 
+/* G30 IoT USART1 RX from the proven v0.4.7 bridge: one interrupt
+ * producer, one task consumer. No FreeRTOS calls inside this ISR. */
+static volatile uint8_t g30_iot_head, g30_iot_tail, g30_iot_overflow;
+static uint8_t g30_iot_rx_buf[256];
+
+void G30_IoT_RxInit(void)
+{
+  g30_iot_head = g30_iot_tail = g30_iot_overflow = 0u;
+  /* USART1 was initialized by HAL. Add only the proven RXNE interrupt. */
+  HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(USART1_IRQn);
+  SET_BIT(USART1->CR1, USART_CR1_RXNEIE);
+}
+
+int G30_IoT_GetByte(void)
+{
+  if (g30_iot_tail == g30_iot_head) return -1;
+  uint8_t b = g30_iot_rx_buf[g30_iot_tail];
+  g30_iot_tail = (uint8_t)(g30_iot_tail + 1u);
+  return (int)b;
+}
+
+void USART1_IRQHandler(void)
+{
+  uint32_t sr = USART1->SR;
+  if (sr & (USART_SR_RXNE | USART_SR_ORE | USART_SR_NE | USART_SR_FE)) {
+    uint8_t b = (uint8_t)USART1->DR; /* also clears ORE/NE/FE */
+    if (sr & USART_SR_RXNE) {
+      uint8_t next = (uint8_t)(g30_iot_head + 1u);
+      if (next != g30_iot_tail) {
+        g30_iot_rx_buf[g30_iot_head] = b;
+        g30_iot_head = next;
+      } else {
+        g30_iot_overflow = 1u;
+      }
+    }
+  }
+}
+
 /* USER CODE BEGIN 1 */
 
 /* USER CODE END 1 */
