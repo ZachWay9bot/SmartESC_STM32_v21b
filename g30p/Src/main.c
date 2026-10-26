@@ -96,6 +96,17 @@ static void MX_NVIC_Init(void);
 static void G30_RuntimeInitTask(void *argument)
 {
   (void)argument;
+  /* Transport is already responsive. Set up motor-side resources here so
+   * a failing ADC/TIM peripheral cannot silence the IoT UART handshake.
+   * Order within the motor path remains unchanged. */
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_TIM1_Init();
+  /* TIM3 is Hall-only on G30P; sensorless build leaves it unused. */
+  MX_USART3_UART_Init();
+  MX_USART2_UART_Init();
+  MX_CRC_Init();
+  MX_NVIC_Init();
   MX_MotorControl_Init();
   vTaskDelay(pdMS_TO_TICKS(100));
   conf_general_init();
@@ -133,18 +144,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   G30Recovery_CheckAndRun();
+  /* DMA clock is needed by HAL_UART_MspInit(), but motor ADC/TIM setup
+   * must not delay the UART service. */
   MX_DMA_Init();
-  MX_ADC1_Init();
-  MX_ADC2_Init();
-  MX_TIM1_Init();
-  /* TIM3 is Hall-only on G30P; sensorless build leaves it unused. */
-  MX_USART3_UART_Init();
   MX_USART1_UART_Init();
-  MX_USART2_UART_Init();
-  MX_CRC_Init();
-
-  /* Initialize interrupts */
-  MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
   /* Start VESC service on IoT USART1 before the motor subsystem.
    * Early G30Recovery_CheckAndRun() remains unmodified above. */
