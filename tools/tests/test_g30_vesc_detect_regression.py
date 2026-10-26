@@ -98,7 +98,11 @@ class G30VescDetectRegression(unittest.TestCase):
             "buffer_append_int16(buffer, res, &ind);",
             "g30_detect_active = false;",
         )
-        positions = [worker.index(item) for item in steps]
+        # Verify the established Detect All path on its own. The new manual
+        # detect branches intentionally exit before the original path begins.
+        detect_all = worker.split(
+            "/* Original Detect All implementation below stays unchanged. */", 1)[1]
+        positions = [detect_all.index(item) for item in steps]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("res = -11;", worker)  # abort
         self.assertIn("res = -10;", worker)  # flux failure
