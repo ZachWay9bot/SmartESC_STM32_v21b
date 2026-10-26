@@ -10,18 +10,17 @@
 
 #ifdef G30P
 
-/* G30 3-Cap port contract: BMS PB10/PB11 = VESC Tool (USART3),
- * IoT PB6/PB7 = unchanged original UART-IAP / early recovery (USART1),
- * yellow dashboard PA2 = half-duplex Ninebot protocol (USART2).
- * Only the VESC CLI UART mapping changes here. */
+/* G30 3-Cap: VESC Tool uses the proven IoT PB6/PB7 USART1 after startup.
+ * Original early recovery owns the same UART before application startup.
+ * Dashboard remains on PA2 USART2; BMS USART3 is unchanged. */
 #define VBUS_ADC_CHANNEL                                                     MC_ADC_CHANNEL_1
 #define VOLTAGE_DIVIDER_GAIN     											 (float)3363.5
 
-#define VESC_USART                                                 			 USART3
+#define VESC_USART                                                 			 USART1
 
-#define VESC_USART_DMA													     huart3
-#define VESC_USART_TX_DMA													 hdma_usart3_tx
-#define VESC_USART_RX_DMA													 hdma_usart3_rx
+#define VESC_USART_DMA													     huart1
+#define VESC_USART_TX_DMA													 hdma_usart1_tx
+#define VESC_USART_RX_DMA													 hdma_usart1_rx
 
 #define APP_USART_DMA														 huart2
 #define APP_USART_TX_DMA												     hdma_usart2_tx
