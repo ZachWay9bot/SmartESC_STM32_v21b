@@ -32,6 +32,21 @@ class G30IoTVescKeyboard(unittest.TestCase):
         self.assertIn("VescToSTM_set_speed(buffer_get_int32", g30)
         self.assertIn("VescToSTM_set_current_rel", g30)
 
+    def test_uart_task_is_usable_before_motor_runtime(self):
+        main = G30("g30p/Src/main.c")
+        cli = G30("common_files/src/task_cli.c")
+        dispatch = G30("common_files/src/VescCommand.c")
+        task = G30("common_files/src/task_init.c")
+        self.assertIn("vTaskStartScheduler();", main)
+        self.assertNotIn("vTaskSwitchContext();", main)
+        self.assertLess(main.index("task_comm_init();"), main.index("vTaskStartScheduler();"))
+        self.assertIn("HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U)", cli)
+        self.assertIn("HAL_UART_Transmit(port->uart, buf, len, 100U)", cli)
+        self.assertIn("if (!g30_runtime_ready && packet_id != COMM_FW_VERSION) return;", dispatch)
+        self.assertIn("volatile bool g30_runtime_ready = false;", task)
+        self.assertIn("task_cli_init(&main_uart);", task)
+        self.assertNotIn("task_cli_init(&iot_uart);", task)
+
     def test_reverse_only_same_rolling_direction_and_zero_coast(self):
         s = G30("common_files/src/VescToSTM.c")
         self.assertIn("G30Sensorless_M1.core.direction != g30_requested_direction", s)
