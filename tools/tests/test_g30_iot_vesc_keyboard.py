@@ -12,9 +12,9 @@ G30 = lambda p: (ROOT / p).read_text(encoding="utf-8")
 class G30IoTVescKeyboard(unittest.TestCase):
     def test_service_uart_is_iot(self):
         p = G30("common_files/inc/product.h").split("#else", 1)[0]
-        self.assertRegex(p, r"#define\\s+VESC_USART\\s+USART1")
-        self.assertRegex(p, r"#define\\s+VESC_USART_DMA\\s+huart1")
-        self.assertRegex(p, r"#define\\s+APP_USART_DMA\\s+huart2")
+        self.assertRegex(p, r"#define\s+VESC_USART\s+USART1")
+        self.assertRegex(p, r"#define\s+VESC_USART_DMA\s+huart1")
+        self.assertRegex(p, r"#define\s+APP_USART_DMA\s+huart2")
 
     def test_early_recovery_call_preserved(self):
         s = G30("g30p/Src/main.c")
@@ -28,7 +28,7 @@ class G30IoTVescKeyboard(unittest.TestCase):
                     "COMM_SET_CURRENT_REL", "COMM_SET_CURRENT_BRAKE",
                     "COMM_SET_HANDBRAKE", "COMM_APP_DISABLE_OUTPUT", "COMM_ALIVE"):
             with self.subTest(cmd=cmd):
-                self.assertRegex(g30, r"case\\s+" + cmd + r"\\s*:")
+                self.assertRegex(g30, r"case\s+" + cmd + r"\s*:")
         self.assertIn("VescToSTM_set_speed(buffer_get_int32", g30)
         self.assertIn("VescToSTM_set_current_rel", g30)
 
