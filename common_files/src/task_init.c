@@ -22,6 +22,9 @@
 */
 
 #include "task_init.h"
+#ifdef G30P
+#include "g30_recovery_iap.h"
+#endif
 #include "task_LED.h"
 #include "task_pwr.h"
 #include "product.h"
@@ -48,6 +51,7 @@ port_str aux_uart = {	.uart = &APP_USART_DMA,
 volatile bool g30_runtime_ready = false;
 
 void task_comm_init(void){
+	G30Recovery_AppInit();
 	task_cli_init(&main_uart);
 }
 
