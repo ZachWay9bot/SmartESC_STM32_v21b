@@ -70,6 +70,11 @@ void G30_UART1_RxStart(void)
     USART1->CR1 |= USART_CR1_RXNEIE;
 }
 
+bool G30_UART1_RxOverflowed(void)
+{
+    return g30_uart_overflow != 0u;
+}
+
 int G30_UART1_Getc(void)
 {
     if (g30_uart_tail == g30_uart_head) return -1;
