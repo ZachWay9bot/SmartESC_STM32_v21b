@@ -275,32 +275,10 @@ static bool g30_detect_flux(float r, float l_h, float *flux) {
 static volatile bool g30_detect_active;
 static void (*g30_detect_reply)(unsigned char*, unsigned int, PACKET_STATE_t*);
 static PACKET_STATE_t *g30_detect_phandle;
-static uint8_t g30_detect_command;
 
 static void g30_detect_worker(void *arg) {
     (void)arg;
     float r = 0.0f, l_h = 0.0f, flux = 0.0f;
-    if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC) {
-        bool ok = !tune_abort_requested && g30_detect_rl(&r, &l_h);
-        if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP)
-            ok = ok && !tune_abort_requested && g30_detect_flux(r, l_h, &flux);
-        uint8_t send_buffer[PACKET_SIZE(20)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        int32_t ind = 0;
-        buffer[ind++] = g30_detect_command;
-        if (g30_detect_command == COMM_DETECT_MOTOR_R_L) {
-            buffer_append_float32(buffer, ok ? r : 0.0f, 1e6f, &ind);
-            buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind);
-        } else {
-            buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind);
-        }
-        g30_detect_reply(send_buffer, ind, g30_detect_phandle);
-        tune_abort_requested = false;
-        g30_detect_active = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
     int16_t res = -100;
 
     if (!tune_abort_requested && g30_detect_rl(&r, &l_h)) {
@@ -583,12 +561,7 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * path for VESC Tool's one-click detector.
      */
     case COMM_DETECT_APPLY_ALL_FOC:
-    case COMM_DETECT_MOTOR_R_L:
-    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP:
         if (!g30_detect_active) {
-            if (packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP && len < 16u)
-                break;
-            g30_detect_command = packet_id;
             tune_abort_requested = false;
             g30_detect_reply = reply_func;
             g30_detect_phandle = phandle;
@@ -600,14 +573,8 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
                 uint8_t send_buffer[PACKET_SIZE(4)];
                 uint8_t *buffer = send_buffer + PACKET_HEADER;
                 int32_t ind = 0;
-                buffer[ind++] = packet_id;
-                if (packet_id == COMM_DETECT_APPLY_ALL_FOC)
-                    buffer_append_int16(buffer, -100, &ind);
-                else {
-                    buffer_append_float32(buffer, 0.0f, 1e6f, &ind);
-                    if (packet_id == COMM_DETECT_MOTOR_R_L)
-                        buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
-                }
+                buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
+                buffer_append_int16(buffer, -100, &ind);
                 reply_func(send_buffer, ind, phandle);
             }
         }
