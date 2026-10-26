@@ -275,28 +275,25 @@ static bool g30_detect_flux(float r, float l_h, float *flux) {
 static volatile bool g30_detect_active;
 static void (*g30_detect_reply)(unsigned char*, unsigned int, PACKET_STATE_t*);
 static PACKET_STATE_t *g30_detect_phandle;
-/* Manual FOC detection uses the existing G30 calibrated/limited routines.
- * Only the reply shape differs from Detect All; manual buttons never write
- * motor configuration or change IAP/bootloader behavior. */
-static volatile uint8_t g30_detect_command;
-static float g30_detect_req_r;
-static float g30_detect_req_l;
+static uint8_t g30_detect_command;
 
 static void g30_detect_worker(void *arg) {
     (void)arg;
-    /* Individual VESC Tool FOC detect pages use these exact response shapes.
-     * Keep all measurement work in this task so the IoT packet task can
-     * continue answering serial traffic while the motor is being measured. */
-    if (g30_detect_command == COMM_DETECT_MOTOR_R_L) {
-        float r = 0.0f, l_h = 0.0f;
+    float r = 0.0f, l_h = 0.0f, flux = 0.0f;
+    if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC) {
         bool ok = !tune_abort_requested && g30_detect_rl(&r, &l_h);
+        if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP)
+            ok = ok && !tune_abort_requested && g30_detect_flux(r, l_h, &flux);
         uint8_t send_buffer[PACKET_SIZE(20)];
         uint8_t *buffer = send_buffer + PACKET_HEADER;
         int32_t ind = 0;
-        buffer[ind++] = COMM_DETECT_MOTOR_R_L;
-        buffer_append_float32(buffer, ok ? r : 0.0f, 1e6f, &ind);
-        /* Existing VESC wire value is inductance in uH at scale 1e3. */
-        buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind);
+        buffer[ind++] = g30_detect_command;
+        if (g30_detect_command == COMM_DETECT_MOTOR_R_L) {
+            buffer_append_float32(buffer, ok ? r : 0.0f, 1e6f, &ind);
+            buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind);
+        } else {
+            buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind);
+        }
         g30_detect_reply(send_buffer, ind, g30_detect_phandle);
         tune_abort_requested = false;
         g30_detect_active = false;
@@ -304,24 +301,6 @@ static void g30_detect_worker(void *arg) {
         return;
     }
 
-    if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP) {
-        float flux = 0.0f;
-        bool ok = !tune_abort_requested &&
-                  g30_detect_flux(g30_detect_req_r, g30_detect_req_l, &flux);
-        uint8_t send_buffer[PACKET_SIZE(12)];
-        uint8_t *buffer = send_buffer + PACKET_HEADER;
-        int32_t ind = 0;
-        buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
-        buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind);
-        g30_detect_reply(send_buffer, ind, g30_detect_phandle);
-        tune_abort_requested = false;
-        g30_detect_active = false;
-        vTaskDelete(NULL);
-        return;
-    }
-
-    /* Original Detect All implementation below stays unchanged. */
-    float r = 0.0f, l_h = 0.0f, flux = 0.0f;
     int16_t res = -100;
 
     if (!tune_abort_requested && g30_detect_rl(&r, &l_h)) {
@@ -603,62 +582,13 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * working, while the apply-all command below drives the same measurement
      * path for VESC Tool's one-click detector.
      */
-    /* VESC Tool's individual motor detection buttons. Flux detection uses
-     * the same fixed G30 test stimulus as Detect All, rather than accepting
-     * arbitrary current/duty/ERPM parameters from the generic VESC page. */
+    case COMM_DETECT_APPLY_ALL_FOC:
     case COMM_DETECT_MOTOR_R_L:
     case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP:
         if (!g30_detect_active) {
-            float r = 0.0f, l_h = 0.0f;
-            if (packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP) {
-                if (len < 16u) break;
-                int32_t ri = 0;
-                (void)buffer_get_float32(data, 1e3f, &ri); /* requested I */
-                (void)buffer_get_float32(data, 1e3f, &ri); /* requested ramp */
-                (void)buffer_get_float32(data, 1e3f, &ri); /* requested duty */
-                r = buffer_get_float32(data, 1e6f, &ri);
-                l_h = len >= 20u
-                    ? buffer_get_float32(data, 1e8f, &ri)
-                    : mc_conf.foc_motor_l;
-                if (!isfinite(r) || !isfinite(l_h) ||
-                    r <= 0.05f || r >= 2.5f ||
-                    l_h <= 0.00005f || l_h >= 0.003f) {
-                    uint8_t send_buffer[PACKET_SIZE(12)];
-                    uint8_t *buffer = send_buffer + PACKET_HEADER;
-                    int32_t ind = 0;
-                    buffer[ind++] = COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP;
-                    buffer_append_float32(buffer, 0.0f, 1e7f, &ind);
-                    reply_func(send_buffer, ind, phandle);
-                    break;
-                }
-            }
-            g30_detect_req_r = r;
-            g30_detect_req_l = l_h;
-            g30_detect_command = (uint8_t)packet_id;
-            tune_abort_requested = false;
-            g30_detect_reply = reply_func;
-            g30_detect_phandle = phandle;
-            g30_detect_active = true;
-            if (xTaskCreate(g30_detect_worker, "g30det", 320, NULL,
-                            tskIDLE_PRIORITY + 1, NULL) != pdPASS) {
-                g30_detect_active = false;
-                tune_abort_requested = false;
-                uint8_t send_buffer[PACKET_SIZE(20)];
-                uint8_t *buffer = send_buffer + PACKET_HEADER;
-                int32_t ind = 0;
-                buffer[ind++] = packet_id;
-                buffer_append_float32(buffer, 0.0f,
-                                     packet_id == COMM_DETECT_MOTOR_R_L ? 1e6f : 1e7f, &ind);
-                if (packet_id == COMM_DETECT_MOTOR_R_L)
-                    buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
-                reply_func(send_buffer, ind, phandle);
-            }
-        }
-        break;
-
-    case COMM_DETECT_APPLY_ALL_FOC:
-        if (!g30_detect_active) {
-            g30_detect_command = COMM_DETECT_APPLY_ALL_FOC;
+            if (packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP && len < 16u)
+                break;
+            g30_detect_command = packet_id;
             tune_abort_requested = false;
             g30_detect_reply = reply_func;
             g30_detect_phandle = phandle;
@@ -670,8 +600,14 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
                 uint8_t send_buffer[PACKET_SIZE(4)];
                 uint8_t *buffer = send_buffer + PACKET_HEADER;
                 int32_t ind = 0;
-                buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
-                buffer_append_int16(buffer, -100, &ind);
+                buffer[ind++] = packet_id;
+                if (packet_id == COMM_DETECT_APPLY_ALL_FOC)
+                    buffer_append_int16(buffer, -100, &ind);
+                else {
+                    buffer_append_float32(buffer, 0.0f, 1e6f, &ind);
+                    if (packet_id == COMM_DETECT_MOTOR_R_L)
+                        buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
+                }
                 reply_func(send_buffer, ind, phandle);
             }
         }
