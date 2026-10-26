@@ -40,6 +40,9 @@
 #include <printf.h>
 #include "terminal.h"
 #include "product.h"
+#ifdef G30P
+#include "task_init.h"
+#endif
 #include "app.h"
 #include "ninebot.h"
 
@@ -272,10 +275,32 @@ static bool g30_detect_flux(float r, float l_h, float *flux) {
 static volatile bool g30_detect_active;
 static void (*g30_detect_reply)(unsigned char*, unsigned int, PACKET_STATE_t*);
 static PACKET_STATE_t *g30_detect_phandle;
+static uint8_t g30_detect_command;
 
 static void g30_detect_worker(void *arg) {
     (void)arg;
     float r = 0.0f, l_h = 0.0f, flux = 0.0f;
+    if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC) {
+        bool ok = !tune_abort_requested && g30_detect_rl(&r, &l_h);
+        if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP)
+            ok = ok && !tune_abort_requested && g30_detect_flux(r, l_h, &flux);
+        uint8_t send_buffer[PACKET_SIZE(20)];
+        uint8_t *buffer = send_buffer + PACKET_HEADER;
+        int32_t ind = 0;
+        buffer[ind++] = g30_detect_command;
+        if (g30_detect_command == COMM_DETECT_MOTOR_R_L) {
+            buffer_append_float32(buffer, ok ? r : 0.0f, 1e6f, &ind);
+            buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind);
+        } else {
+            buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind);
+        }
+        g30_detect_reply(send_buffer, ind, g30_detect_phandle);
+        tune_abort_requested = false;
+        g30_detect_active = false;
+        vTaskDelete(NULL);
+        return;
+    }
+
     int16_t res = -100;
 
     if (!tune_abort_requested && g30_detect_rl(&r, &l_h)) {
@@ -336,6 +361,10 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     len--;
     send_func = reply_func;
 
+    /* Early service on IoT: announce firmware version before MCSDK is
+     * initialized, but do not enter motor/config handlers until ready. */
+    if (!g30_runtime_ready && packet_id != COMM_FW_VERSION) return;
+
     if (g30_detect_active &&
         packet_id != COMM_ALIVE &&
         packet_id != COMM_APP_DISABLE_OUTPUT) return;
@@ -370,6 +399,7 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         buffer[ind++] = packet_id;
         uint32_t mask = 0xFFFFFFFFu;
         if (packet_id == COMM_GET_VALUES_SELECTIVE) {
+            if (len < 4u) break; /* selective values mask is four bytes */
             int32_t ri = 0;
             mask = buffer_get_uint32(data, &ri);
             buffer_append_uint32(buffer, mask, &ind);
@@ -403,44 +433,149 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         reply_func(send_buffer, ind, phandle);
     } break;
 
+    /* VESC Tool keyboard controls use duty/current/RPM according to the
+     * selected control mode. On G30 the legacy duty command is mapped to
+     * the bounded FOC torque request, not raw unregulated PWM. */
+    case COMM_SET_DUTY: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_current_rel((float)buffer_get_int32(data, &ind) / 100000.0f);
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_RPM: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_speed(buffer_get_int32(data, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_CURRENT_REL: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_current_rel(buffer_get_float32(data, 1e5f, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_HANDBRAKE:
+        /* No electric brake and no regeneration: coast. */
+        VescToSTM_set_brake(0);
+        VescToSTM_timeout_reset();
+        break;
+    case COMM_SET_POS:
+        /* Position loop is not available on the G30 sensorless profile. */
+        VescToSTM_timeout_reset();
+        break;
+
     case COMM_SET_CURRENT: {
+        if (len < 4u) break;
         int32_t ind = 0;
         VescToSTM_set_torque(buffer_get_int32(data, &ind));
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_CURRENT_BRAKE: {
+        if (len < 4u) break;
         int32_t ind = 0;
         VescToSTM_set_brake(-buffer_get_int32(data, &ind));
         VescToSTM_timeout_reset();
     } break;
     case COMM_SET_MCCONF: {
+        /*
+         * MCCONF v6.06 decoder has no length argument. Its generated wire
+         * format is exactly 484 bytes (including signature/reserved fields).
+         * Reject incomplete or oversized packets BEFORE decoding/writing.
+         */
+        enum { G30_MCCONF_WIRE_BYTES = 484 };
+        if (len != G30_MCCONF_WIRE_BYTES) break;
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
         *mcconf = *mc_interface_get_configuration();
         if (confgenerator_deserialize_mcconf(data, mcconf)) {
             conf_general_mcconf_hw_limits(mcconf);
             conf_general_setup_mc(mcconf);
-            conf_general_store_mc_configuration(mcconf, 0);
-            int32_t ind = 0;
-            uint8_t send_buffer[PACKET_SIZE(8)];
-            uint8_t *buffer = send_buffer + PACKET_HEADER;
-            buffer[ind++] = packet_id;
-            reply_func(send_buffer, ind, phandle);
+            /* Do not acknowledge an unsuccessful settings write as success.
+             * The flash writer and its address/layout remain unchanged. */
+            if (conf_general_store_mc_configuration(mcconf, 0)) {
+                int32_t ind = 0;
+                uint8_t send_buffer[PACKET_SIZE(8)];
+                uint8_t *buffer = send_buffer + PACKET_HEADER;
+                buffer[ind++] = packet_id;
+                reply_func(send_buffer, ind, phandle);
+            }
         }
         vPortFree(mcconf);
     } break;
 
-    case COMM_GET_MCCONF: {
+    case COMM_GET_MCCONF:
+    case COMM_GET_MCCONF_DEFAULT: {
         mc_configuration *mcconf = pvPortMalloc(sizeof(mc_configuration));
         if (!mcconf) break;
-        *mcconf = *mc_interface_get_configuration();
+        if (packet_id == COMM_GET_MCCONF) {
+            *mcconf = *mc_interface_get_configuration();
+        } else {
+            confgenerator_set_defaults_mcconf(mcconf);
+        }
         commands_send_mcconf(packet_id, mcconf, phandle);
         vPortFree(mcconf);
     } break;
 
+    case COMM_SET_APPCONF: {
+        /*
+         * Generated APPCONF v6.06 wire format is 476 bytes, including its
+         * signature and reserved fields. The legacy decoder has no length
+         * argument, so only call it after validating the COMPLETE payload.
+         * This size is cross-checked against the serializer by a source test.
+         */
+        enum { G30_APPCONF_WIRE_BYTES = 476 };
+        if (len != G30_APPCONF_WIRE_BYTES) break;
+
+        app_configuration *new_conf = pvPortMalloc(sizeof(app_configuration));
+        if (!new_conf) break;
+        const app_configuration *active = app_get_configuration();
+        *new_conf = *active; /* preserve fields omitted by wire format */
+
+        if (confgenerator_deserialize_appconf(data, new_conf) &&
+            /* VESC Tool must not disconnect the fixed stock dash input. */
+            new_conf->app_to_use == active->app_to_use &&
+            new_conf->app_adc_conf.ctrl_type == active->app_adc_conf.ctrl_type &&
+            new_conf->app_uart_baudrate == active->app_uart_baudrate &&
+            new_conf->shutdown_mode == active->shutdown_mode &&
+            new_conf->app_adc_conf.update_rate_hz >= 1u &&
+            new_conf->app_adc_conf.update_rate_hz <= 200u &&
+            isfinite(new_conf->timeout_brake_current) &&
+            isfinite(new_conf->app_adc_conf.voltage_start) &&
+            isfinite(new_conf->app_adc_conf.voltage_end) &&
+            isfinite(new_conf->app_adc_conf.voltage2_start) &&
+            isfinite(new_conf->app_adc_conf.voltage2_end) &&
+            new_conf->app_adc_conf.voltage_end >
+                new_conf->app_adc_conf.voltage_start &&
+            new_conf->app_adc_conf.voltage2_end >
+                new_conf->app_adc_conf.voltage2_start) {
+            if (conf_general_store_app_configuration(new_conf)) {
+                app_set_configuration(new_conf);
+                uint8_t send_buffer[PACKET_SIZE(1)];
+                send_buffer[PACKET_HEADER] = COMM_SET_APPCONF;
+                reply_func(send_buffer, 1u, phandle);
+            }
+        }
+        vPortFree(new_conf);
+    } break;
+
+    case COMM_GET_APPCONF:
+    case COMM_GET_APPCONF_DEFAULT: {
+        app_configuration *conf = pvPortMalloc(sizeof(app_configuration));
+        if (!conf) break;
+        if (packet_id == COMM_GET_APPCONF) {
+            *conf = *app_get_configuration();
+        } else {
+            confgenerator_set_defaults_appconf(conf);
+        }
+        commands_send_appconf(packet_id, conf, phandle);
+        vPortFree(conf);
+    } break;
+
     /*
-     * G30 DETECT profile intentionally omits APPCONF and MCCONF_DEFAULT.
-     * Live motor config, telemetry and control remain available.
+     * COMM_SET_APPCONF is intentionally not enabled yet: the existing
+     * deserializer has no input-length parameter and writes application
+     * configuration. Verify bounded parsing and dashboard-mode preservation
+     * before enabling VESC Tool writes on the stock dashboard target.
      */
     /*
      * G30 FOC detection. These two commands keep the manual Detect FOC page
@@ -448,7 +583,12 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
      * path for VESC Tool's one-click detector.
      */
     case COMM_DETECT_APPLY_ALL_FOC:
+    case COMM_DETECT_MOTOR_R_L:
+    case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP:
         if (!g30_detect_active) {
+            if (packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP && len < 16u)
+                break;
+            g30_detect_command = packet_id;
             tune_abort_requested = false;
             g30_detect_reply = reply_func;
             g30_detect_phandle = phandle;
@@ -460,8 +600,14 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
                 uint8_t send_buffer[PACKET_SIZE(4)];
                 uint8_t *buffer = send_buffer + PACKET_HEADER;
                 int32_t ind = 0;
-                buffer[ind++] = COMM_DETECT_APPLY_ALL_FOC;
-                buffer_append_int16(buffer, -100, &ind);
+                buffer[ind++] = packet_id;
+                if (packet_id == COMM_DETECT_APPLY_ALL_FOC)
+                    buffer_append_int16(buffer, -100, &ind);
+                else {
+                    buffer_append_float32(buffer, 0.0f, 1e6f, &ind);
+                    if (packet_id == COMM_DETECT_MOTOR_R_L)
+                        buffer_append_float32(buffer, 0.0f, 1e3f, &ind);
+                }
                 reply_func(send_buffer, ind, phandle);
             }
         }

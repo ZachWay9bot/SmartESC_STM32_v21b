@@ -36,6 +36,11 @@ extern MCT_Handle_t* pMCT[NBR_OF_MOTORS];
 unsigned long getRunTimeCounterValue(void);
 
 void task_init();
+#ifdef G30P
+bool task_comm_init(void);
+void task_runtime_init(void);
+extern volatile bool g30_runtime_ready;
+#endif
 
 extern port_str main_uart;
 extern port_str aux_uart;

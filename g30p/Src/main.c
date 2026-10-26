@@ -84,13 +84,25 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_CRC_Init(void);
 static void MX_NVIC_Init(void);
+extern void G30_IoT_RxInit(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/* VESC UART must respond even when motor-control initialization is slow.
+ * This task runs after the scheduler starts, then makes motor commands
+ * available only when the MCSDK application is initialized. */
+static void G30_RuntimeInitTask(void *argument)
+{
+  (void)argument;
+  MX_MotorControl_Init();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  conf_general_init();
+  task_runtime_init();
+  vTaskDelete(NULL);
+}
 /* USER CODE END 0 */
 
 /**
@@ -134,15 +146,26 @@ int main(void)
 
   /* Initialize interrupts */
   MX_NVIC_Init();
+  /* G30 IoT: start the IRQ-backed FIFO before the scheduler/comm task. */
+  G30_IoT_RxInit();
   /* USER CODE BEGIN 2 */
-  MX_MotorControl_Init();
-  HAL_Delay(100);
-  conf_general_init();
+  /* Start VESC service on IoT USART1 before the motor subsystem.
+   * Early G30Recovery_CheckAndRun() remains unmodified above. */
+  if (!task_comm_init())
+  {
+    /* Existing error path: scheduler must not start without the IoT task. */
+    Error_Handler();
+  }
+  if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
+                  PRIO_BELOW_NORMAL, NULL) != pdPASS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  vTaskSwitchContext();
+  vTaskStartScheduler();
   while (1)
   {
     /* USER CODE END WHILE */

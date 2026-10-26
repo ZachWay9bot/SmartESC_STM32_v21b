@@ -1,9 +1,28 @@
 # Firmware builds
 
-> **DO NOT FLASH THESE HISTORICAL ARTIFACTS ON POTTED CONTROLLERS.** No independently verified serial restore exists for this exact SmartESC integration. All future SHU packaging is blocked pending test evidence.\n\n
-Current firmware: **SmartESC G30 NativeDash v0.8.7**
+## Aktuelle Entwicklung: BENCH UART-IAP ohne SHU
 
-The authoritative source is the default branch. GitHub Actions builds the G30 target and publishes BIN/ELF/MAP plus a ScooterHacking ZIPv3 package as workflow artifacts.
+Bis zur ausdruecklichen Wiederfreigabe durch den Projektinhaber wird im
+Entwicklungs-Build **keine ScooterHacking-ZIP (SHU)** erzeugt oder publiziert.
+Der Controller wird am Pruefstand ohne Dashboard entwickelt.
+
+- Aktiver Branch: `audit/vesc-g30-20261021`, Draft PR #23.
+- GitHub Action: **Build G30 Bench UART-IAP on commit**.
+- Build-Artefakte: rohe `g30p.bin`, ELF/MAP, verschluesseltes
+  `SmartESC_G30_BENCH_IAP_Driver.bin`, JSON-Manifest mit Hashes und RAM-Audit.
+- Das IAP-Driver.bin ist ein **ungetesteter Bench-Kandidat**, kein
+  hardwareverifizierter Stand und keine motorseitige Fahrfreigabe.
+- Der SHU-Build-Workflow ist entfernt und der Tag-Release erstellt keine
+  SHU-ZIP. Das Skript `tools/make_shu_zip.py` bleibt unveraendert fuer
+  eine spaetere explizite Freigabe erhalten.
+- Flash-/Recovery-Code, UART-Protokoll, Flashadressen und Bootloader bleiben
+  unveraendert.
+
+## Historisch veroeffentlichte Dateien unter firmware/v0.8.7
+
+**Die bestehenden v0.8.7-Downloads sind Altartefakte und NICHT identisch mit
+dem laufenden Bench-Entwicklungsstand.** Nicht als aktuelle Bench-Firmware
+interpretieren oder ohne passende Hardwarepruefung flashen.
 
 Reference CI build #87:
 
@@ -12,7 +31,7 @@ Reference CI build #87:
 - SHU ZIP SHA-256: `84e8e3187992a88046a75d519e64ed7cb27962605bffbe5a877a33652a6457c9`
 - IAP Driver.bin SHA-256: `0fb3bc6d6800ed676c3a39845c8787a896b706e2b9fe1ef56815a651c24e584e`
 
-Use the **Build G30 NativeDash on commit** or **Build G30 SHU candidate** workflow for reproducible current binaries.
+Fuer aktuelle Entwicklungsbinaries den **Build G30 Bench UART-IAP on commit** verwenden. Die folgenden Hashes beziehen sich nur auf die historischen v0.8.7-Artefakte.
 
 
 ## Published repository files

@@ -108,7 +108,12 @@ void G30SL_Configure(G30Sensorless_Handle_t *h, float r_ohm, float l_h, float fl
     if (min_su > 1000u) min_su = 1000u;
     h->core.cfg.min_speed_unit = (uint16_t)min_su;
 
-    uint32_t hf = foc_hz ? foc_hz : 16000u;
+    /* conf_general_setup_f_sw() has already set the *actual* control
+     * execution rate on this sensor. Above 20 kHz the PWM regulator runs
+     * every second PWM cycle; replacing this with raw foc_hz doubled the
+     * predicted electrical angle step and observer cadence. */
+    uint32_t hf = h->_Super.hMeasurementFrequency;
+    if (!hf) hf = foc_hz ? foc_hz : 16000u;
     h->_Super.hMeasurementFrequency = (uint16_t)hf;
     h->observer_div = (uint16_t)(hf / h->core.cfg.observer_hz);
     if (!h->observer_div) h->observer_div = 1u;

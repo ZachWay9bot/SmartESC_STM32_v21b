@@ -29,6 +29,38 @@ static inline uint8_t VescToSTM_motor_pole_pairs(void) {
 	return (uint8_t)(poles / 2u);
 }
 
+/* Requested physical torque direction for the G30 rolling FOC gate.
+ * VESC signed commands are multiplied by the existing config inversion.
+ * Reverse is enabled by spinning the wheel in reverse BEFORE takeover;
+ * a direction change while rolling the other way coasts, never brakes. */
+#ifdef G30P
+static volatile int8_t g30_requested_direction;
+
+static bool g30_drive_request_ok(int32_t requested) {
+    if (!requested) {
+        g30_requested_direction = 0;
+        VescToSTM_set_brake(0); /* G30 brake path is coast-only. */
+        return false;
+    }
+    int8_t requested_dir = requested > 0 ? 1 : -1;
+    if (mc_conf.m_invert_direction) requested_dir = -requested_dir;
+
+    /* A VESC Tool FWD -> RWD change must not apply negative torque
+     * to a wheel still spinning forward (nor the opposite). */
+    int16_t measured_speed = G30SL_IsActive(&G30Sensorless_M1)
+                           ? G30Sensorless_M1.core.observer_speed_unit
+                           : G30Sensorless_M1.core.speed_unit;
+    if (!PWM_Handle_M1._Super.PWM_off && measured_speed &&
+        (measured_speed > 0 ? 1 : -1) != requested_dir) {
+        g30_requested_direction = 0;
+        VescToSTM_set_brake(0);
+        return false;
+    }
+    g30_requested_direction = requested_dir;
+    return true;
+}
+#endif
+
 stm_state VescToSTM_mode;
 
 float adc_1;
@@ -120,7 +152,7 @@ int16_t VescToSTM_Iq_lim_hook(int16_t iq){
 	uint16_t temp = NTC_GetAvTemp_d(pMCT[M1]->pTemperatureSensor);
 	if(temp < fp.temp_cut_start){
 		app_adc_set_mode(M365_MODE_TEMP);
-		iq = utils_map_int(temp, fp.temp_cut_start, fp.battery_cut_end, 0, iq);
+		iq = utils_map_int(temp, fp.temp_cut_start, fp.temp_cut_end, 0, iq);
 	}else{
 		app_adc_clear_mode(M365_MODE_TEMP);
 	}
@@ -270,10 +302,18 @@ void VescToSTM_set_open_loop_erpm(int16_t erpm){
 }
 
 
-const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 uint8_t VescToSTM_get_uid(uint8_t * ptr, uint8_t size){
 	if(size>12) size=12;
+#ifdef G30P
+	/* STM32F103: 96-bit factory-programmed UID at 0x1FFFF7E8.
+	 * VESC Tool must identify the actual 3-Cap, not a shared test UUID.
+	 * Read-only silicon ROM area; no IAP/flash or motor state is touched. */
+	const uint8_t * uid = (const uint8_t *)0x1FFFF7E8u;
+	memcpy(ptr, uid, size);
+#else
+	const uint8_t test[12] = {1,2,3,4,5,6,7,8,9,10,11,12};
 	memcpy(ptr, test, size);
+#endif
 	return size;
 }
 
@@ -353,7 +393,10 @@ void VescToSTM_pwm_start(void){
 #ifdef G30P
 		/* Normal torque is kick-start only. Explicit open-loop motor detection bypasses
 		 * the rolling gate, but never marks the sensorless observer active. */
-		if(!G30SL_PreparePwmStart(&G30Sensorless_M1)) return;
+		if(!G30Sensorless_M1._Super.open_loop &&
+           (g30_requested_direction == 0 ||
+            G30Sensorless_M1.core.direction != g30_requested_direction)) return;
+        if(!G30SL_PreparePwmStart(&G30Sensorless_M1)) return;
 #endif
 		float fVd = 32768.0 / VescToSTM_get_bus_voltage() * motor_voltage;
 		utils_truncate_number(&fVd, -32767, 32767);
@@ -391,6 +434,9 @@ void VescToSTM_update_torque(int32_t q, int32_t min_erpm, int32_t max_erpm){
 }
 
 void VescToSTM_set_torque(int32_t current){
+#ifdef G30P
+    if (!g30_drive_request_ok(current)) return;
+#endif
 	VescToSTM_mode = STM_STATE_TORQUE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -405,6 +451,12 @@ void VescToSTM_set_brake_current_rel(float val) {
 }
 
 void VescToSTM_set_brake_rel_int(int32_t val){
+#ifdef G30P
+	/* G30 coast-only policy: brake requests cannot generate torque or regen. */
+	(void)val;
+	VescToSTM_set_brake(0);
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -424,9 +476,19 @@ void VescToSTM_set_brake_rel_int(int32_t val){
 	SpeednTorqCtrlM1.PISpeed->wUpperIntegralLimit = p_q * SP_KIDIV;
 	SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = n_q * SP_KIDIV;
 	MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
+#endif
 }
 
 void VescToSTM_set_brake(int32_t current){
+#ifdef G30P
+    g30_requested_direction = 0;
+	(void)current;
+	VescToSTM_mode = STM_STATE_BRAKE;
+	VescToSTM_set_open_loop(false, 0, 0);
+	VescToSTM_set_current(0.0f, 0.0f);
+	VescToSTM_pwm_stop();
+	return;
+#else
 	VescToSTM_mode = STM_STATE_BRAKE;
 	VescToSTM_set_open_loop(false, 0, 0);
 
@@ -450,10 +512,15 @@ void VescToSTM_set_brake(int32_t current){
 		SpeednTorqCtrlM1.PISpeed->wLowerIntegralLimit = q * SP_KIDIV;
 		MCI_ExecSpeedRamp(pMCI[M1], 0 , 0);
 	}
+#endif
 }
 
 
 void VescToSTM_set_speed(int32_t erpm){
+#ifdef G30P
+    /* Zero RPM must coast, not turn into -s_pid_min_erpm. */
+    if (!g30_drive_request_ok(erpm)) return;
+#endif
 	erpm *= DIR_MUL;
 	VescToSTM_mode = STM_STATE_SPEED;
 	if(erpm>0){
@@ -860,6 +927,9 @@ float VescToSTM_get_duty_cycle_now_fast(void) {
  * The relative current value, range [-1.0 1.0]
  */
 void VescToSTM_set_current_rel(float val) {
+#ifdef G30P
+    if (!isfinite(val) || !g30_drive_request_ok(val > 0.0f ? 1 : (val < 0.0f ? -1 : 0))) return;
+#endif
 	VescToSTM_mode = STM_STATE_TORQUE;
 	VescToSTM_set_open_loop(false, 0, 0);
 	int q;
@@ -885,6 +955,9 @@ void VescToSTM_set_current_rel(float val) {
  * The relative current value, range [-32768 +32768]
  */
 void VescToSTM_set_current_rel_int(int32_t val) {
+#ifdef G30P
+    if (!g30_drive_request_ok(val)) return;
+#endif
 	VescToSTM_mode = STM_STATE_TORQUE;
 	VescToSTM_set_open_loop(false, 0, 0);
 	int q;

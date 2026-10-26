@@ -319,12 +319,21 @@ void task_app(void * argument)
 
 				/* Stock G30 answers the dashboard heartbeat (CMD64) with CMD64 only. */
 				if(frame.cmd == 0x64) {
-					int spd = (int)(fabsf(VescToSTM_get_speed()) * 3.6f + 0.5f);
-					int bat = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 100);
-					if(spd > 255) spd = 255;
-					if(bat < 0) bat = 0; else if(bat > 100) bat = 100;
-					m365_to_display.speed = (uint8_t)spd;
-					m365_to_display.battery = (uint8_t)bat;
+					/*
+					 * Keep CMD64 response layout and cadence unchanged.
+					 * Only sanitize readings before narrowing to display bytes:
+					 * invalid battery configuration can return NaN/Inf, and
+					 * converting those directly to int is undefined behavior.
+					 */
+					float speed_kmh = fabsf(VescToSTM_get_speed()) * 3.6f;
+					float battery_pct = VescToSTM_get_battery_level(0) * 100.0f;
+					if (!isfinite(speed_kmh) || speed_kmh < 0.0f) speed_kmh = 0.0f;
+					if (!isfinite(battery_pct)) battery_pct = 0.0f;
+					if (speed_kmh > 255.0f) speed_kmh = 255.0f;
+					if (battery_pct < 0.0f) battery_pct = 0.0f;
+					if (battery_pct > 100.0f) battery_pct = 100.0f;
+					m365_to_display.speed = (uint8_t)(speed_kmh + 0.5f);
+					m365_to_display.battery = (uint8_t)(battery_pct + 0.5f);
 					m365_to_display.beep = 0;
 					m365_to_display.faultcode = (uint8_t)pMCI[M1]->pSTM->hFaultOccurred;
 					addCRC((uint8_t*)&m365_to_display, sizeof(m365_to_display));
