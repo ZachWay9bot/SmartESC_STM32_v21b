@@ -706,6 +706,12 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /* PA15 (green LED) powers up as JTDI on STM32F103.
+   * Release only JTAG pins; retain SWD PA13/PA14 for emergency recovery.
+   * No bootloader, IAP or flash geometry change. */
+  __HAL_RCC_AFIO_CLK_ENABLE();
+  __HAL_AFIO_REMAP_SWJ_NOJTAG();
+
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_SET);
 
