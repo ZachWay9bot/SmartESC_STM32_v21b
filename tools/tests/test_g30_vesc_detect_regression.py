@@ -107,26 +107,27 @@ class G30VescDetectRegression(unittest.TestCase):
         self.assertIn("res = -10;", worker)  # flux failure
         self.assertIn("res = -100;", worker)  # initial error
 
-    def test_manual_rl_and_flux_use_existing_async_g30_detector(self):
-        for cmd in ("COMM_DETECT_APPLY_ALL_FOC", "COMM_DETECT_MOTOR_R_L",
-                    "COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP"):
-            self.assertIn("case " + cmd + ":", ACTIVE)
+    def test_active_g30_dispatcher_keeps_original_detect_all(self):
+        # Restore the working single Detect All path from the pre-BENCH314
+        # baseline. Legacy manual commands live in a separate dispatcher
+        # and are not exposed as supported G30 functions.
+        self.assertIn("case COMM_DETECT_APPLY_ALL_FOC:", ACTIVE)
+        self.assertNotIn("case COMM_DETECT_MOTOR_R_L:", ACTIVE)
+        self.assertNotIn("case COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP:", ACTIVE)
         worker = routine("g30_detect_worker")
-        self.assertIn("if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC)", worker)
         self.assertIn("g30_detect_rl(&r, &l_h)", worker)
         self.assertIn("g30_detect_flux(r, l_h, &flux)", worker)
-        self.assertIn("ok ? l_h * 1e6f : 0.0f, 1e3f", worker)
-        self.assertIn("ok ? flux : 0.0f, 1e7f", worker)
-        self.assertIn("packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP && len < 16u", ACTIVE)
-        self.assertIn('xTaskCreate(g30_detect_worker, "g30det", 320, NULL,', ACTIVE)
 
-    def test_manual_detection_never_stores_motor_configuration(self):
-        worker = routine("g30_detect_worker")
-        manual = worker.split("if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC)", 1)[1].split(
-            "int16_t res = -100;", 1)[0]
-        self.assertNotIn("conf_general_store_mc_configuration(", manual)
-        self.assertNotIn("conf_general_setup_mc(", manual)
-        self.assertIn("g30_detect_active = false;", manual)
+    def test_dual_ninebot_and_vesc_parsers_share_iot_rx(self):
+        cli = (ROOT / "common_files/src/task_cli.c").read_text()
+        self.assertIn("G30Recovery_AppPushByte(rx_byte,", cli)
+        self.assertIn("packet_process_byte(rx_byte, port->phandle)", cli)
+        recovery = (ROOT / "common_files/src/g30_recovery_iap.c").read_text()
+        self.assertIn("parser_push(byte,&f)", recovery)
+        self.assertIn("dispatch(&f)", recovery)
+        self.assertIn("!s_app_flash_idle", recovery)
+        self.assertIn("G30Recovery_AppIapActive", recovery)
+        self.assertIn("if (G30Recovery_AppIapActive() && packet_id != COMM_FW_VERSION) return;", ACTIVE)
 
 
 if __name__ == "__main__":
