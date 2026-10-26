@@ -39,6 +39,11 @@ typedef struct {
 
 static rec_iap_t s_iap;
 static rec_parser_t s_parser;
+/* Normal G30 application shares the early-recovery protocol decoder.
+ * IAP writes are refused whenever the motor output is not off. */
+static uint8_t s_app_mode;
+static uint8_t s_app_flash_idle;
+
 
 static uint32_t rd32(const uint8_t *p) {
     return (uint32_t)p[0] | ((uint32_t)p[1] << 8) |
@@ -243,6 +248,8 @@ static void dispatch(const rec_frame_t *f) {
         for(uint8_t i=0;i<n;i++){uint16_t w=map_word((uint8_t)(f->index+(i>>1)));out[i]=(uint8_t)(w>>((i&1u)*8u));}
         send_frame(f->src,0x04u,f->index,out,n); return;
     }
+    if (s_app_mode && f->cmd>=0x07u && f->cmd<=0x0Au &&
+        !s_app_flash_idle) { ack(f->src,REC_ERR_BUSY); return; }
     if (f->cmd==0x07u){ack(f->src,iap_begin(f->data,f->len));return;}
     if (f->cmd==0x08u){ack(f->src,iap_write(f->index,f->data,f->len));return;}
     if (f->cmd==0x09u){ack(f->src,iap_finalize(f->data,f->len));return;}
@@ -254,6 +261,24 @@ static void dispatch(const rec_frame_t *f) {
         static const uint8_t d[8]={'R','C','V','1',0,0,0,1};
         send_frame(f->src,0xF0u,0,d,sizeof d);
     }
+}
+
+void G30Recovery_AppInit(void) {
+    s_parser.st = s_parser.pos = 0u;
+    s_parser.sum = s_parser.rxcrc = 0u;
+    iap_init();
+    s_app_mode = 1u;
+}
+
+bool G30Recovery_AppIapActive(void) {
+    return s_app_mode && (s_iap.begun || s_iap.finalized);
+}
+
+void G30Recovery_AppPushByte(uint8_t byte, bool flash_idle) {
+    rec_frame_t f;
+    if (!parser_push(byte,&f)) return;
+    s_app_flash_idle = flash_idle ? 1u : 0u;
+    dispatch(&f);
 }
 
 void G30Recovery_CheckAndRun(void) {
