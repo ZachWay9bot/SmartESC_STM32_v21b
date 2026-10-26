@@ -151,7 +151,7 @@ void task_cli(void * argument)
 		}
 		/* The motor initialization task runs below PRIO_NORMAL. A busy
 		 * UART polling loop would permanently starve it after scheduler start. */
-		vTaskDelay(pdMS_TO_TICKS(1));
+		vTaskDelay(1);
 	}
 #else
 	uint32_t rd_ptr=0;
