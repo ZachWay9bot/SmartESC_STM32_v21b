@@ -35,8 +35,24 @@ def static_check():
     main = (BASE/"g30p/Src/main.c").read_text()
     if any(p not in main for p in REQUIRED):
         errors.append("Early recovery or motor initialization anchors missing")
-    elif not main.index("G30Recovery_CheckAndRun();") < main.index("MX_ADC1_Init();") < main.index("MX_TIM1_Init();"):
-        errors.append("Power-button recovery no longer precedes ADC/PWM startup")
+    else:
+        # UART-first boot defers the motor's ADC/PWM setup into a FreeRTOS
+        # task. Check the control-flow anchors in each function explicitly.
+        runtime_start = main.find("static void G30_RuntimeInitTask(")
+        main_start = main.find("int main(void)")
+        task_body = main[runtime_start:main_start] if 0 <= runtime_start < main_start else ""
+        boot_body = main[main_start:] if main_start >= 0 else ""
+        runtime_sequence = ("MX_ADC1_Init();", "MX_TIM1_Init();", "MX_MotorControl_Init();")
+        boot_sequence = ("G30Recovery_CheckAndRun();", "MX_USART1_UART_Init();",
+                         "task_comm_init();", "xTaskCreate(G30_RuntimeInitTask",
+                         "vTaskStartScheduler();")
+        if (not task_body or not all(x in task_body for x in runtime_sequence) or
+                not all(x in boot_body for x in boot_sequence) or
+                not all(task_body.index(a) < task_body.index(b)
+                        for a, b in zip(runtime_sequence, runtime_sequence[1:])) or
+                not all(boot_body.index(a) < boot_body.index(b)
+                        for a, b in zip(boot_sequence, boot_sequence[1:]))):
+            errors.append("Power-button recovery no longer precedes deferred ADC/PWM startup")
     required_recovery = ("if (f->cmd==0x07u)", "if (f->cmd==0x08u)",
                          "if (f->cmd==0x09u)", "if (f->cmd==0x0Au)",
                          "REC_STAGING_BASE", "REC_CONTROL",

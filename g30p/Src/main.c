@@ -90,7 +90,29 @@ static void MX_NVIC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/* VESC UART must respond even when motor-control initialization is slow.
+ * This task runs after the scheduler starts, then makes motor commands
+ * available only when the MCSDK application is initialized. */
+static void G30_RuntimeInitTask(void *argument)
+{
+  (void)argument;
+  /* Transport is already responsive. Set up motor-side resources here so
+   * a failing ADC/TIM peripheral cannot silence the IoT UART handshake.
+   * Order within the motor path remains unchanged. */
+  MX_ADC1_Init();
+  MX_ADC2_Init();
+  MX_TIM1_Init();
+  /* TIM3 is Hall-only on G30P; sensorless build leaves it unused. */
+  MX_USART3_UART_Init();
+  MX_USART2_UART_Init();
+  MX_CRC_Init();
+  MX_NVIC_Init();
+  MX_MotorControl_Init();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  conf_general_init();
+  task_runtime_init();
+  vTaskDelete(NULL);
+}
 /* USER CODE END 0 */
 
 /**
@@ -122,27 +144,24 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   G30Recovery_CheckAndRun();
+  /* DMA clock is needed by HAL_UART_MspInit(), but motor ADC/TIM setup
+   * must not delay the UART service. */
   MX_DMA_Init();
-  MX_ADC1_Init();
-  MX_ADC2_Init();
-  MX_TIM1_Init();
-  /* TIM3 is Hall-only on G30P; sensorless build leaves it unused. */
-  MX_USART3_UART_Init();
   MX_USART1_UART_Init();
-  MX_USART2_UART_Init();
-  MX_CRC_Init();
-
-  /* Initialize interrupts */
-  MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-  MX_MotorControl_Init();
-  HAL_Delay(100);
-  conf_general_init();
+  /* Start VESC service on IoT USART1 before the motor subsystem.
+   * Early G30Recovery_CheckAndRun() remains unmodified above. */
+  task_comm_init();
+  if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
+                  PRIO_BELOW_NORMAL, NULL) != pdPASS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  vTaskSwitchContext();
+  vTaskStartScheduler();
   while (1)
   {
     /* USER CODE END WHILE */
@@ -687,6 +706,12 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
+  /* PA15 (green LED) powers up as JTDI on STM32F103.
+   * Release only JTAG pins; retain SWD PA13/PA14 for emergency recovery.
+   * No bootloader, IAP or flash geometry change. */
+  __HAL_RCC_AFIO_CLK_ENABLE();
+  __HAL_AFIO_REMAP_SWJ_NOJTAG();
+
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(TPS_ENA_GPIO_Port, TPS_ENA_Pin, GPIO_PIN_SET);
 
@@ -777,13 +802,37 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   * @brief  This function is executed in case of error occurrence.
   * @retval None
   */
+/* Fail-stop LED diagnostics before or after FreeRTOS scheduler startup.
+ * DWT counter is local to this routine and does not require SysTick or IRQs.
+ * Output assumes PA15 was configured by MX_GPIO_Init.  No IAP access. */
+static void g30_error_led_wait(uint32_t milliseconds)
+{
+  uint32_t hz = SystemCoreClock ? SystemCoreClock : 8000000u;
+  uint32_t span = (hz / 1000u) * milliseconds;
+  uint32_t start = DWT->CYCCNT;
+  while ((uint32_t)(DWT->CYCCNT - start) < span) { }
+}
+
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
-  while (1)
-  {
+  DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0u;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+  /* 2 s ON, 6 flashes, 2 s OFF; no reset, flash, or motor action. */
+  for (;;) {
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    g30_error_led_wait(2000u);
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+    g30_error_led_wait(250u);
+    for (unsigned i=0u; i<6u; ++i) {
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+      g30_error_led_wait(180u);
+      HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+      g30_error_led_wait(230u);
+    }
+    g30_error_led_wait(2000u);
   }
   /* USER CODE END Error_Handler_Debug */
 }

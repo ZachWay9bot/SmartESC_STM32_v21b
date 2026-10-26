@@ -52,6 +52,58 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* Port of XBOT_VESC_BRIDGE_v0.4.6 SOURCE/src/uart.c.
+ * USART1 remapped to PB6/PB7 is initialized by HAL before this starts.
+ * Buffer is 256 bytes; uint8_t head/tail naturally wrap.
+ * The ISR does not call FreeRTOS or HAL interrupt machinery.
+ */
+static volatile uint8_t g30_uart_head, g30_uart_tail, g30_uart_overflow;
+static uint8_t g30_uart_rx[256];
+
+void G30_UART1_RxStart(void)
+{
+    USART1->CR1 &= ~USART_CR1_RXNEIE;
+    g30_uart_head = g30_uart_tail = g30_uart_overflow = 0u;
+    /* The existing HAL UART init sets baud, remap, pins and UE/TE/RE. */
+    HAL_NVIC_SetPriority(USART1_IRQn, 6, 0);
+    HAL_NVIC_EnableIRQ(USART1_IRQn);
+    USART1->CR1 |= USART_CR1_RXNEIE;
+}
+
+bool G30_UART1_RxOverflowed(void)
+{
+    return g30_uart_overflow != 0u;
+}
+
+int G30_UART1_Getc(void)
+{
+    if (g30_uart_tail == g30_uart_head) return -1;
+    uint8_t b = g30_uart_rx[g30_uart_tail];
+    g30_uart_tail = (uint8_t)(g30_uart_tail + 1u);
+    return (int)b;
+}
+
+void G30_UART1_Putc(uint8_t b)
+{
+    while (!(USART1->SR & USART_SR_TXE)) { }
+    USART1->DR = b;
+}
+
+void USART1_IRQHandler(void)
+{
+    uint32_t sr = USART1->SR;
+    if (sr & (USART_SR_RXNE | USART_SR_ORE)) {
+        uint8_t b = (uint8_t)USART1->DR;
+        uint8_t next = (uint8_t)(g30_uart_head + 1u);
+        if (next != g30_uart_tail) {
+            g30_uart_rx[g30_uart_head] = b;
+            g30_uart_head = next;
+        } else {
+            g30_uart_overflow = 1u;
+        }
+    }
+}
+
 
 /* USER CODE END 0 */
 
