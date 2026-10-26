@@ -39,6 +39,17 @@
 
 
 void putbuffer(unsigned char *buf, unsigned int len, port_str * port){
+#ifdef G30P
+	/* Bring-up reliability first: G30 VESC UART uses blocking TX so replies do
+	 * not depend on DMA IRQ state or HAL DMA completion bookkeeping. At 115200
+	 * baud the short VESC control packets are comfortably within the comm task
+	 * budget while motor control continues in hardware/MC interrupts. */
+	if(port->half_duplex){
+		port->uart->Instance->CR1 &= ~USART_CR1_RE;
+	}
+	(void)HAL_UART_Transmit(port->uart, buf, len, 100U);
+	if(port->half_duplex) port->uart->Instance->CR1 |= USART_CR1_RE;
+#else
 	if(port->half_duplex){
 		port->uart->Instance->CR1 &= ~USART_CR1_RE;
 		vTaskDelay(1);
@@ -49,6 +60,7 @@ void putbuffer(unsigned char *buf, unsigned int len, port_str * port){
 		vTaskDelay(1);
 	}
 	if(port->half_duplex) port->uart->Instance->CR1 |= USART_CR1_RE;
+#endif
 }
 
 void comm_uart_send_packet(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle) {
@@ -65,8 +77,70 @@ static uint32_t uart_get_write_pos(port_str * port){
 
 void task_cli(void * argument)
 {
-	uint32_t rd_ptr=0;
 	port_str * port = (port_str*) argument;
+#ifdef G30P
+	uint8_t rx_byte = 0;
+	port->phandle = packet_init(putbuffer, process_packet, port);
+	if (port->phandle == NULL) {
+		port->task_handle = NULL;
+		vTaskDelete(NULL);
+		return;
+	}
+
+	/* USART was already fully initialized by MX_USARTx_UART_Init(). Do not
+	 * re-run MSP/DMA setup here. Poll one byte at a time; this also clears and
+	 * recovers UART error conditions through the HAL receive path.
+	 *
+	 * G30 communication starts before MCSDK motor initialization. Until
+	 * g30_runtime_ready becomes true, only the packet transport is active. */
+	bool runtime_comm_initialized = false;
+	uint16_t slow_update_cnt=0;
+	for(;;)
+	{
+		if (HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U) == HAL_OK) {
+			packet_process_byte(rx_byte, port->phandle);
+		}
+
+		if (g30_runtime_ready && !runtime_comm_initialized) {
+			VescToSTM_set_brake_rel_int(0);
+			app_check_timer();
+			runtime_comm_initialized = true;
+		}
+
+		if (g30_runtime_ready) {
+			VescToSTM_handle_timeout();
+		}
+
+		if(g30_runtime_ready && appconf.app_to_use == APP_ADC_UART){
+			app_check_timer();
+			if(slow_update_cnt==0){
+				if(m365_to_display.mode & 0x40){
+					m365_to_display.speed = VescToSTM_get_speed()*2.2369;
+				}else{
+					m365_to_display.speed = VescToSTM_get_speed()*3.6;
+				}
+				m365_to_display.speed *= DIR_MUL;
+				m365_to_display.battery = utils_map(VescToSTM_get_battery_level(0), 0, 1, 0, 96);
+				m365_to_display.beep=0;
+				m365_to_display.faultcode=pMCI[M1]->pSTM->hFaultOccurred;
+			}else{
+				slow_update_cnt++;
+				if(slow_update_cnt==100) slow_update_cnt=0;
+			}
+		}
+
+		if(ulTaskNotifyTake(pdTRUE, 0)){
+			if(appconf.app_to_use == APP_ADC_UART){
+				app_adc_stop_output();
+			}
+			port->task_handle = NULL;
+			packet_free(port->phandle);
+			vTaskDelete(NULL);
+			return;
+		}
+	}
+#else
+	uint32_t rd_ptr=0;
 	uint8_t * usart_rx_dma_buffer = pvPortMalloc(port->rx_buffer_size);
 	if (usart_rx_dma_buffer == NULL) {
 		port->task_handle = NULL;
@@ -143,6 +217,7 @@ void task_cli(void * argument)
 		}
 
 	}
+#endif
 }
 
 void task_cli_init(port_str * port){
