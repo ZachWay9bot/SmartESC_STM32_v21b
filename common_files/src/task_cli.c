@@ -26,6 +26,7 @@
 #include "task_init.h"
 #ifdef G30P
 #include "g30_recovery_iap.h"
+extern int G30_IoT_GetByte(void);
 #endif
 #include "task_pwr.h"
 #include "TTerm.h"
@@ -82,7 +83,6 @@ void task_cli(void * argument)
 {
 	port_str * port = (port_str*) argument;
 #ifdef G30P
-	uint8_t rx_byte = 0;
 	port->phandle = packet_init(putbuffer, process_packet, port);
 	if (port->phandle == NULL) {
 		port->task_handle = NULL;
@@ -103,12 +103,17 @@ void task_cli(void * argument)
 	uint16_t slow_update_cnt=0;
 	for(;;)
 	{
-		if (HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U) == HAL_OK) {
-			/* FO76: one IoT byte to BOTH parsers, never switch protocols. */
+		/* Drain the proven USART1 IRQ RX ring; a blocking single-byte
+		 * HAL receive can miss bytes while the motor/RTOS is busy. */
+		int rx;
+		while ((rx = G30_IoT_GetByte()) >= 0) {
+			uint8_t rx_byte = (uint8_t)rx;
+			/* One incoming byte is presented to BOTH protocol parsers. */
 			G30Recovery_AppPushByte(rx_byte,
 				g30_runtime_ready && PWM_Handle_M1._Super.PWM_off);
 			packet_process_byte(rx_byte, port->phandle);
 		}
+		vTaskDelay(1);
 
 		if (g30_runtime_ready && !runtime_comm_initialized) {
 			VescToSTM_set_brake_rel_int(0);
