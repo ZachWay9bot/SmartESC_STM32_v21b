@@ -811,7 +811,7 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   __disable_irq();
-  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
   DWT->CYCCNT = 0u;
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
   /* 2 s ON, 6 flashes, 2 s OFF; no reset, flash, or motor action. */
