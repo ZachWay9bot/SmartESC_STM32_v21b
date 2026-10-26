@@ -84,6 +84,7 @@ static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_CRC_Init(void);
 static void MX_NVIC_Init(void);
+extern void G30_IoT_RxInit(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -145,6 +146,8 @@ int main(void)
 
   /* Initialize interrupts */
   MX_NVIC_Init();
+  /* G30 IoT: start the IRQ-backed FIFO before the scheduler/comm task. */
+  G30_IoT_RxInit();
   /* USER CODE BEGIN 2 */
   /* Start VESC service on IoT USART1 before the motor subsystem.
    * Early G30Recovery_CheckAndRun() remains unmodified above. */
