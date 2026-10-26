@@ -74,11 +74,72 @@ void comm_uart_send_packet(unsigned char *data, unsigned int len, PACKET_STATE_t
 
 void process_packet(unsigned char *data, unsigned int len, PACKET_STATE_t * phandle){
 #ifdef G30P
-    /* packet.c invokes this only after a complete CRC-valid VESC frame. */
+    /* v0.4.6 port invokes this only after a CRC-valid VESC frame. */
     G30_DiagVescFrameSeen();
 #endif
 	commands_process_packet(data, len, &comm_uart_send_packet, phandle);
 }
+
+#ifdef G30P
+/* Exact v0.4.6 VESC serial frame state machine, independently from packet.c.
+ * The only adapted boundary is the completed payload callback, which uses
+ * existing SmartESC VESC command handlers and VESC reply framing.
+ * Ninebot bytes continue to the unchanged recovery/IAP frame parser.
+ */
+#define G30_V046_VESC_RX_MAX 520u
+typedef struct {
+    uint8_t st, start, crc_hi, len_hi;
+    uint16_t len, pos;
+    uint8_t data[G30_V046_VESC_RX_MAX];
+} g30_v046_parser_t;
+static g30_v046_parser_t g30_v046_vp;
+
+static uint16_t g30_v046_crc16(const uint8_t *buf, uint32_t len)
+{
+    int16_t crc = 0;
+    while (len--) {
+        int16_t x = ((uint8_t)(crc >> 8)) ^ *buf++;
+        x ^= x >> 4;
+        crc = (int16_t)((crc << 8) ^ (x << 12) ^ (x << 5) ^ x);
+    }
+    return (uint16_t)crc;
+}
+
+static int g30_v046_vesc_parser_push(uint8_t x, PACKET_STATE_t *phandle)
+{
+    g30_v046_parser_t *vp = &g30_v046_vp;
+    switch (vp->st) {
+    case 0: if (x == 2u) { vp->start = 2u; vp->st = 1; }
+            else if (x == 3u) { vp->start = 3u; vp->st = 6; } break;
+    case 1: vp->len = x;
+            if (!vp->len || vp->len > G30_V046_VESC_RX_MAX) { vp->st = 0; break; }
+            vp->pos = 0; vp->st = 2; break;
+    case 6: vp->len_hi = x; vp->st = 7; break;
+    case 7: vp->len = ((uint16_t)vp->len_hi << 8) | x;
+            if (!vp->len || vp->len > G30_V046_VESC_RX_MAX) { vp->st = 0; break; }
+            vp->pos = 0; vp->st = 2; break;
+    case 2: vp->data[vp->pos++] = x;
+            if (vp->pos >= vp->len) vp->st = 3; break;
+    case 3: vp->crc_hi = x; vp->st = 4; break;
+    case 4: {
+        uint16_t got = ((uint16_t)vp->crc_hi << 8) | x;
+        uint16_t want = g30_v046_crc16(vp->data, vp->len);
+        vp->st = (got == want) ? 5 : 0;
+        break;
+    }
+    case 5:
+        if (x == 3u) {
+            process_packet(vp->data, vp->len, phandle);
+            vp->st = 0;
+            return 1;
+        }
+        vp->st = 0;
+        break;
+    default: vp->st = 0; break;
+    }
+    return 0;
+}
+#endif
 
 static uint32_t uart_get_write_pos(port_str * port){
 	return ( ((uint32_t)port->rx_buffer_size - port->uart->hdmarx->Instance->CNDTR) & ((uint32_t)port->rx_buffer_size -1));
@@ -114,7 +175,7 @@ void task_cli(void * argument)
 			uint8_t byte = (uint8_t)rx;
 			G30Recovery_AppPushByte(byte,
 				g30_runtime_ready && PWM_Handle_M1._Super.PWM_off);
-			packet_process_byte(byte, port->phandle);
+			(void)g30_v046_vesc_parser_push(byte, port->phandle);
 		}
 
 		if (g30_runtime_ready && !runtime_comm_initialized) {
