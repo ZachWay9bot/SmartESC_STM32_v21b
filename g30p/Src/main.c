@@ -148,7 +148,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   /* Start VESC service on IoT USART1 before the motor subsystem.
    * Early G30Recovery_CheckAndRun() remains unmodified above. */
-  task_comm_init();
+  if (!task_comm_init())
+  {
+    /* Existing error path: scheduler must not start without the IoT task. */
+    Error_Handler();
+  }
   if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
                   PRIO_BELOW_NORMAL, NULL) != pdPASS)
   {
