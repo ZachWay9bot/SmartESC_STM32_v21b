@@ -1,0 +1,26 @@
+name: G30 host protocol regression
+
+on:
+  pull_request:
+    branches: [vesc_comp]
+    paths:
+      - 'common_files/src/**'
+      - 'tools/tests/**'
+      - '.github/workflows/g30-host-regression.yml'
+  push:
+    branches: [vesc_comp]
+    paths:
+      - 'common_files/src/**'
+      - 'tools/tests/**'
+      - '.github/workflows/g30-host-regression.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  host-protocol-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check G30 VESC configuration and dashboard protocol
+        run: python3 -m unittest discover -s tools/tests -p 'test_g30*.py' -v

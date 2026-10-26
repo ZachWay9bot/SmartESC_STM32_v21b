@@ -22,6 +22,9 @@
 */
 
 #include "task_init.h"
+#ifdef G30P
+#include "g30_recovery_iap.h"
+#endif
 #include "task_LED.h"
 #include "task_pwr.h"
 #include "product.h"
@@ -44,9 +47,32 @@ port_str aux_uart = {	.uart = &APP_USART_DMA,
 						.task_handle = NULL
 };
 
+#ifdef G30P
+volatile bool g30_runtime_ready = false;
+
+void task_comm_init(void){
+	G30Recovery_AppInit();
+	task_cli_init(&main_uart);
+}
+
+void task_runtime_init(void){
+	app_adc_init_timer();
+	task_LED_init(&main_uart);
+#if !defined(G30_NO_DASH) || (G30_NO_DASH == 0)
+	task_PWR_init(&main_uart);
+#endif
+	g30_runtime_ready = true;
+}
+#endif
+
 void task_init(){
+#ifdef G30P
+	task_comm_init();
+	task_runtime_init();
+#else
 	app_adc_init_timer();
 	task_cli_init(&main_uart);
 	task_LED_init(&main_uart);  //Bring up the blinky
 	task_PWR_init(&main_uart);  //Manage power button
+#endif
 }

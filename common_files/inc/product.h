@@ -10,6 +10,9 @@
 
 #ifdef G30P
 
+/* G30 3-Cap: VESC Tool uses the proven IoT PB6/PB7 USART1 after startup.
+ * Original early recovery owns the same UART before application startup.
+ * Dashboard remains on PA2 USART2; BMS USART3 is unchanged. */
 #define VBUS_ADC_CHANNEL                                                     MC_ADC_CHANNEL_1
 #define VOLTAGE_DIVIDER_GAIN     											 (float)3363.5
 
