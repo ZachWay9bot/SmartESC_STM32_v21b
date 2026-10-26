@@ -404,6 +404,37 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
         reply_func(send_buffer, ind, phandle);
     } break;
 
+    /* VESC Tool keyboard controls use duty/current/RPM according to the
+     * selected control mode. On G30 the legacy duty command is mapped to
+     * the bounded FOC torque request, not raw unregulated PWM. */
+    case COMM_SET_DUTY: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_current_rel((float)buffer_get_int32(data, &ind) / 100000.0f);
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_RPM: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_speed(buffer_get_int32(data, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_CURRENT_REL: {
+        if (len < 4u) break;
+        int32_t ind = 0;
+        VescToSTM_set_current_rel(buffer_get_float32(data, 1e5f, &ind));
+        VescToSTM_timeout_reset();
+    } break;
+    case COMM_SET_HANDBRAKE:
+        /* No electric brake and no regeneration: coast. */
+        VescToSTM_set_brake(0);
+        VescToSTM_timeout_reset();
+        break;
+    case COMM_SET_POS:
+        /* Position loop is not available on the G30 sensorless profile. */
+        VescToSTM_timeout_reset();
+        break;
+
     case COMM_SET_CURRENT: {
         if (len < 4u) break;
         int32_t ind = 0;
