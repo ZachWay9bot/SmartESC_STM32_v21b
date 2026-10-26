@@ -90,7 +90,18 @@ static void MX_NVIC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+/* VESC UART must respond even when motor-control initialization is slow.
+ * This task runs after the scheduler starts, then makes motor commands
+ * available only when the MCSDK application is initialized. */
+static void G30_RuntimeInitTask(void *argument)
+{
+  (void)argument;
+  MX_MotorControl_Init();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  conf_general_init();
+  task_runtime_init();
+  vTaskDelete(NULL);
+}
 /* USER CODE END 0 */
 
 /**
@@ -135,14 +146,19 @@ int main(void)
   /* Initialize interrupts */
   MX_NVIC_Init();
   /* USER CODE BEGIN 2 */
-  MX_MotorControl_Init();
-  HAL_Delay(100);
-  conf_general_init();
+  /* Start VESC service on IoT USART1 before the motor subsystem.
+   * Early G30Recovery_CheckAndRun() remains unmodified above. */
+  task_comm_init();
+  if (xTaskCreate(G30_RuntimeInitTask, "g30init", 512, NULL,
+                  PRIO_BELOW_NORMAL, NULL) != pdPASS)
+  {
+    Error_Handler();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  vTaskSwitchContext();
+  vTaskStartScheduler();
   while (1)
   {
     /* USER CODE END WHILE */
