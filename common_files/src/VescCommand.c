@@ -336,6 +336,10 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     len--;
     send_func = reply_func;
 
+    /* Early service on IoT: announce firmware version before MCSDK is
+     * initialized, but do not enter motor/config handlers until ready. */
+    if (!g30_runtime_ready && packet_id != COMM_FW_VERSION) return;
+
     if (g30_detect_active &&
         packet_id != COMM_ALIVE &&
         packet_id != COMM_APP_DISABLE_OUTPUT) return;
