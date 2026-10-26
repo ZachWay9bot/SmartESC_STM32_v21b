@@ -5,21 +5,26 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 CLI = (ROOT / "common_files/src/task_cli.c").read_text(encoding="utf-8")
+IRQ = (ROOT / "g30p/Src/stm32f1xx_it.c").read_text(encoding="utf-8")
+MAIN = (ROOT / "g30p/Src/main.c").read_text(encoding="utf-8")
 IAP = (ROOT / "common_files/src/g30_recovery_iap.c").read_text(encoding="utf-8")
 HDR = (ROOT / "common_files/src/g30_recovery_iap.h").read_text(encoding="utf-8")
 
 
 class TestFo76IapContract(unittest.TestCase):
     def test_both_protocol_parsers_on_same_byte(self):
-        rx = CLI.index("HAL_UART_Receive(port->uart, &rx_byte")
+        rx = CLI.index("G30_IoT_GetByte()")
         n = CLI.index("G30Recovery_AppPushByte(rx_byte", rx)
         v = CLI.index("packet_process_byte(rx_byte, port->phandle)", rx)
         self.assertLess(rx, n)
         self.assertLess(n, v)
-        self.assertEqual(CLI.count("HAL_UART_Receive(port->uart, &rx_byte"), 1)
+        self.assertNotIn("HAL_UART_Receive(port->uart, &rx_byte", CLI)
+        self.assertIn("USART1_IRQHandler(void)", IRQ)
+        self.assertIn("USART_CR1_RXNEIE", IRQ)
+        self.assertLess(MAIN.index("G30_IoT_RxInit();"), MAIN.index("task_comm_init()"))
 
     def test_ninebot_parser_initialized_before_receive(self):
-        self.assertLess(CLI.index("G30Recovery_AppInit();"), CLI.index("HAL_UART_Receive(port->uart, &rx_byte"))
+        self.assertLess(CLI.index("G30Recovery_AppInit();"), CLI.index("G30_IoT_GetByte()"))
         for name in ("G30Recovery_AppInit", "G30Recovery_AppPushByte", "G30Recovery_AppIapActive"):
             self.assertIn(name + "(", HDR)
             self.assertIn(name + "(", IAP)
