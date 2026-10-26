@@ -24,6 +24,9 @@
 #include "main.h"
 #include "task_cli.h"
 #include "task_init.h"
+#ifdef G30P
+#include "g30_recovery_iap.h"
+#endif
 #include "task_pwr.h"
 #include "TTerm.h"
 #include "printf.h"
@@ -87,9 +90,7 @@ void task_cli(void * argument)
 		return;
 	}
 
-	/* Initialise the in-application Ninebot parser/IAP state exactly once,
-	 * before the shared IoT USART1 receive loop starts. Without this,
-	 * s_app_mode remains zero and the normal IAP path is never active. */
+	/* The in-app Ninebot parser shares the USART1 byte stream with VESC. */
 	G30Recovery_AppInit();
 
 	/* USART was already fully initialized by MX_USARTx_UART_Init(). Do not
@@ -103,6 +104,9 @@ void task_cli(void * argument)
 	for(;;)
 	{
 		if (HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U) == HAL_OK) {
+			/* FO76: one IoT byte to BOTH parsers, never switch protocols. */
+			G30Recovery_AppPushByte(rx_byte,
+				g30_runtime_ready && PWM_Handle_M1._Super.PWM_off);
 			packet_process_byte(rx_byte, port->phandle);
 		}
 
