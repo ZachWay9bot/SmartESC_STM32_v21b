@@ -121,7 +121,9 @@ class G30VescDetectRegression(unittest.TestCase):
     def test_dual_ninebot_and_vesc_parsers_share_iot_rx(self):
         cli = (ROOT / "common_files/src/task_cli.c").read_text()
         self.assertIn("G30Recovery_AppPushByte(byte,", cli)
-        self.assertIn("packet_process_byte(byte, port->phandle)", cli)
+        self.assertIn("g30_v046_vesc_parser_push(byte, port->phandle)", cli)
+        self.assertIn("g30_v046_crc16", cli)
+        self.assertIn("process_packet(vp->data, vp->len, phandle);", cli)
         recovery = (ROOT / "common_files/src/g30_recovery_iap.c").read_text()
         self.assertIn("parser_push(byte,&f)", recovery)
         self.assertIn("dispatch(&f)", recovery)
