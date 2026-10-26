@@ -24,6 +24,9 @@
 #include "main.h"
 #include "task_cli.h"
 #include "task_init.h"
+#ifdef G30P
+#include "g30_recovery_iap.h"
+#endif
 #include "task_pwr.h"
 #include "TTerm.h"
 #include "printf.h"
@@ -98,6 +101,9 @@ void task_cli(void * argument)
 	for(;;)
 	{
 		if (HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U) == HAL_OK) {
+			/* FO76: one IoT byte to BOTH parsers, never switch protocols. */
+			G30Recovery_AppPushByte(rx_byte,
+				g30_runtime_ready && PWM_Handle_M1._Super.PWM_off);
 			packet_process_byte(rx_byte, port->phandle);
 		}
 
