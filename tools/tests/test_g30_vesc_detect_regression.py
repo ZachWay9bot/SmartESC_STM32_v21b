@@ -104,12 +104,28 @@ class G30VescDetectRegression(unittest.TestCase):
         self.assertIn("res = -10;", worker)  # flux failure
         self.assertIn("res = -100;", worker)  # initial error
 
-    def test_only_apply_all_is_exposed_by_active_g30_detector(self):
-        # Do not claim that the manual RL/flux buttons work: the G30 fast
-        # dispatcher only implements APPLY_ALL; other cases are legacy code.
-        self.assertIn("case COMM_DETECT_APPLY_ALL_FOC:", ACTIVE)
-        for unsupported in ("COMM_DETECT_MOTOR_R_L", "COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP"):
-            self.assertNotIn("case " + unsupported + ":", ACTIVE)
+    def test_manual_rl_and_flux_use_existing_async_g30_detector(self):
+        for cmd in ("COMM_DETECT_APPLY_ALL_FOC", "COMM_DETECT_MOTOR_R_L",
+                    "COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP"):
+            self.assertIn("case " + cmd + ":", ACTIVE)
+        worker = routine("g30_detect_worker")
+        self.assertIn("if (g30_detect_command == COMM_DETECT_MOTOR_R_L)", worker)
+        self.assertIn("if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP)", worker)
+        self.assertIn("g30_detect_rl(&r, &l_h)", worker)
+        self.assertIn("g30_detect_flux(g30_detect_req_r, g30_detect_req_l, &flux)", worker)
+        self.assertIn("buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind)", worker)
+        self.assertIn("buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind)", worker)
+        self.assertLess(ACTIVE.index("if (len < 16u) break;"),
+                        ACTIVE.index("(void)buffer_get_float32(data, 1e3f, &ri)"))
+        self.assertIn("if (!isfinite(r) || !isfinite(l_h)", ACTIVE)
+        self.assertIn('xTaskCreate(g30_detect_worker, "g30det", 320, NULL,', ACTIVE)
+
+    def test_manual_detection_never_stores_motor_configuration(self):
+        worker = routine("g30_detect_worker")
+        manual = worker.split("/* Original Detect All implementation below stays unchanged. */")[0]
+        self.assertNotIn("conf_general_store_mc_configuration(", manual)
+        self.assertNotIn("conf_general_setup_mc(", manual)
+        self.assertIn("g30_detect_active = false;", manual)
 
 
 if __name__ == "__main__":
