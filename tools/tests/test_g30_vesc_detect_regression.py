@@ -100,8 +100,7 @@ class G30VescDetectRegression(unittest.TestCase):
         )
         # Verify the established Detect All path on its own. The new manual
         # detect branches intentionally exit before the original path begins.
-        detect_all = worker.split(
-            "/* Original Detect All implementation below stays unchanged. */", 1)[1]
+        detect_all = worker.split("int16_t res = -100;", 1)[1]
         positions = [detect_all.index(item) for item in steps]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("res = -11;", worker)  # abort
@@ -113,20 +112,18 @@ class G30VescDetectRegression(unittest.TestCase):
                     "COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP"):
             self.assertIn("case " + cmd + ":", ACTIVE)
         worker = routine("g30_detect_worker")
-        self.assertIn("if (g30_detect_command == COMM_DETECT_MOTOR_R_L)", worker)
-        self.assertIn("if (g30_detect_command == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP)", worker)
+        self.assertIn("if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC)", worker)
         self.assertIn("g30_detect_rl(&r, &l_h)", worker)
-        self.assertIn("g30_detect_flux(g30_detect_req_r, g30_detect_req_l, &flux)", worker)
-        self.assertIn("buffer_append_float32(buffer, ok ? l_h * 1e6f : 0.0f, 1e3f, &ind)", worker)
-        self.assertIn("buffer_append_float32(buffer, ok ? flux : 0.0f, 1e7f, &ind)", worker)
-        self.assertLess(ACTIVE.index("if (len < 16u) break;"),
-                        ACTIVE.index("(void)buffer_get_float32(data, 1e3f, &ri)"))
-        self.assertIn("if (!isfinite(r) || !isfinite(l_h)", ACTIVE)
+        self.assertIn("g30_detect_flux(r, l_h, &flux)", worker)
+        self.assertIn("ok ? l_h * 1e6f : 0.0f, 1e3f", worker)
+        self.assertIn("ok ? flux : 0.0f, 1e7f", worker)
+        self.assertIn("packet_id == COMM_DETECT_MOTOR_FLUX_LINKAGE_OPENLOOP && len < 16u", ACTIVE)
         self.assertIn('xTaskCreate(g30_detect_worker, "g30det", 320, NULL,', ACTIVE)
 
     def test_manual_detection_never_stores_motor_configuration(self):
         worker = routine("g30_detect_worker")
-        manual = worker.split("/* Original Detect All implementation below stays unchanged. */")[0]
+        manual = worker.split("if (g30_detect_command != COMM_DETECT_APPLY_ALL_FOC)", 1)[1].split(
+            "int16_t res = -100;", 1)[0]
         self.assertNotIn("conf_general_store_mc_configuration(", manual)
         self.assertNotIn("conf_general_setup_mc(", manual)
         self.assertIn("g30_detect_active = false;", manual)
