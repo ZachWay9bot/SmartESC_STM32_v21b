@@ -87,6 +87,11 @@ void task_cli(void * argument)
 		return;
 	}
 
+	/* Initialise the in-application Ninebot parser/IAP state exactly once,
+	 * before the shared IoT USART1 receive loop starts. Without this,
+	 * s_app_mode remains zero and the normal IAP path is never active. */
+	G30Recovery_AppInit();
+
 	/* USART was already fully initialized by MX_USARTx_UART_Init(). Do not
 	 * re-run MSP/DMA setup here. Poll one byte at a time; this also clears and
 	 * recovers UART error conditions through the HAL receive path.
