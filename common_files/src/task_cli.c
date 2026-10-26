@@ -26,6 +26,10 @@
 #include "task_init.h"
 #ifdef G30P
 #include "g30_recovery_iap.h"
+/* v0.4.6 USART1 IRQ/ring-buffer transport, implemented in stm32f1xx_it.c */
+extern void G30_UART1_RxStart(void);
+extern int G30_UART1_Getc(void);
+extern void G30_UART1_Putc(uint8_t byte);
 #endif
 #include "task_pwr.h"
 #include "TTerm.h"
@@ -43,15 +47,12 @@
 
 void putbuffer(unsigned char *buf, unsigned int len, port_str * port){
 #ifdef G30P
-	/* Bring-up reliability first: G30 VESC UART uses blocking TX so replies do
-	 * not depend on DMA IRQ state or HAL DMA completion bookkeeping. At 115200
-	 * baud the short VESC control packets are comfortably within the comm task
-	 * budget while motor control continues in hardware/MC interrupts. */
-	if(port->half_duplex){
-		port->uart->Instance->CR1 &= ~USART_CR1_RE;
-	}
-	(void)HAL_UART_Transmit(port->uart, buf, len, 100U);
-	if(port->half_duplex) port->uart->Instance->CR1 |= USART_CR1_RE;
+    /* Same bytewise blocking USART1 TX as verified v0.4.6.
+     * No DMA completion state and no HAL UART TX state machine. */
+    if (port->uart->Instance == USART1) {
+        for (unsigned int i = 0; i < len; ++i)
+            G30_UART1_Putc(buf[i]);
+    }
 #else
 	if(port->half_duplex){
 		port->uart->Instance->CR1 &= ~USART_CR1_RE;
@@ -82,7 +83,7 @@ void task_cli(void * argument)
 {
 	port_str * port = (port_str*) argument;
 #ifdef G30P
-	uint8_t rx_byte = 0;
+	/* IRQ-driven receive is drained here, as in verified v0.4.6. */
 	port->phandle = packet_init(putbuffer, process_packet, port);
 	if (port->phandle == NULL) {
 		port->task_handle = NULL;
@@ -96,15 +97,19 @@ void task_cli(void * argument)
 	 *
 	 * G30 communication starts before MCSDK motor initialization. Until
 	 * g30_runtime_ready becomes true, only the packet transport is active. */
+	G30_UART1_RxStart();
 	bool runtime_comm_initialized = false;
 	uint16_t slow_update_cnt=0;
 	for(;;)
 	{
-		if (HAL_UART_Receive(port->uart, &rx_byte, 1U, 1U) == HAL_OK) {
-			/* FO76: one IoT byte to BOTH parsers, never switch protocols. */
-			G30Recovery_AppPushByte(rx_byte,
+		/* Exact v0.4.6 dispatch model: every byte goes to both parsers.
+		 * Processing is task-context, while the interrupt buffers RX bytes. */
+		int rx;
+		while ((rx = G30_UART1_Getc()) >= 0) {
+			uint8_t byte = (uint8_t)rx;
+			G30Recovery_AppPushByte(byte,
 				g30_runtime_ready && PWM_Handle_M1._Super.PWM_off);
-			packet_process_byte(rx_byte, port->phandle);
+			packet_process_byte(byte, port->phandle);
 		}
 
 		if (g30_runtime_ready && !runtime_comm_initialized) {
