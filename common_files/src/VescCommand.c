@@ -42,6 +42,7 @@
 #include "product.h"
 #ifdef G30P
 #include "task_init.h"
+#include "g30_recovery_iap.h"
 #endif
 #include "app.h"
 #include "ninebot.h"
@@ -342,6 +343,9 @@ static void commands_process_packet_g30(unsigned char *data, unsigned int len,
     /* Early service on IoT: announce firmware version before MCSDK is
      * initialized, but do not enter motor/config handlers until ready. */
     if (!g30_runtime_ready && packet_id != COMM_FW_VERSION) return;
+    /* During a Ninebot IAP staging transaction no VESC motor command may
+     * reactivate TIM1. FW_VERSION remains available for link diagnostics. */
+    if (G30Recovery_AppIapActive() && packet_id != COMM_FW_VERSION) return;
 
     if (g30_detect_active &&
         packet_id != COMM_ALIVE &&
