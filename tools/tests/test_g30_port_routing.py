@@ -21,15 +21,15 @@ def macro(name):
 
 
 class G30PortRouting(unittest.TestCase):
-    def test_vesc_tool_is_on_bms_uart3(self):
-        self.assertEqual(macro("VESC_USART"), "USART3")
-        self.assertEqual(macro("VESC_USART_DMA"), "huart3")
-        self.assertEqual(macro("VESC_USART_TX_DMA"), "hdma_usart3_tx")
-        self.assertEqual(macro("VESC_USART_RX_DMA"), "hdma_usart3_rx")
+    def test_vesc_tool_is_on_iot_uart1(self):
+        self.assertEqual(macro("VESC_USART"), "USART1")
+        self.assertEqual(macro("VESC_USART_DMA"), "huart1")
+        self.assertEqual(macro("VESC_USART_TX_DMA"), "hdma_usart1_tx")
+        self.assertEqual(macro("VESC_USART_RX_DMA"), "hdma_usart1_rx")
         self.assertIn(".uart = &VESC_USART_DMA", TASK)
-        self.assertIn("PB10     ------> USART3_TX", MSP)
-        self.assertIn("PB11     ------> USART3_RX", MSP)
-        self.assertIn("huart3.Init.BaudRate = 115200;", MAIN)
+        self.assertIn("PB6     ------> USART1_TX", MSP)
+        self.assertIn("PB7     ------> USART1_RX", MSP)
+        self.assertIn("huart1.Init.BaudRate = 115200;", MAIN)
 
     def test_dashboard_yellow_is_unchanged_uart2(self):
         self.assertEqual(macro("APP_USART_DMA"), "huart2")
