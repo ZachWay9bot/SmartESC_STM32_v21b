@@ -37,7 +37,6 @@ port_str main_uart = {	.uart = &VESC_USART_DMA,
 						.half_duplex = false,
 						.task_handle = NULL
 };
-#ifdef G30P
 port_str aux_uart = {	.uart = &APP_USART_DMA,
 					    .rx_buffer_size = 128,
 						.phandle = NULL,
